@@ -74,3 +74,89 @@ def test_main_without_subcommand_uses_help(capsys):
     out = capsys.readouterr().out
     assert "HELP" in out
     assert ctx.obj["color"] is False
+
+
+def test_cli_translate_smoke(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_translate_strings(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr("cli.ai_translate.translate_strings", fake_translate_strings)
+
+    cfg = tmp_path / "config.toml"
+    result = runner.invoke(
+        app,
+        [
+            "--config-path",
+            str(cfg),
+            "--log-level",
+            "DEBUG",
+            "--no-color",
+            "translate",
+            "--input-file",
+            str(tmp_path / "in.xml"),
+            "--output-file",
+            str(tmp_path / "out.xml"),
+            "--allowed-regex",
+            "^keep",
+            "--ignore-regex",
+            "skip",
+            "--dry-run",
+        ],
+    )
+    assert result.exit_code == 0
+    assert called["input_file"] == Path(tmp_path / "in.xml")
+    assert called["output_file"] == Path(tmp_path / "out.xml")
+    assert called["allowed_regex"] == "^keep"
+    assert called["ignore_regex"] == "skip"
+    assert called["dry_run"] is True
+    assert called["config_path"] == cfg
+    assert called["log_level"] == "DEBUG"
+    assert called["color"] is False
+
+
+def test_cli_voice_smoke(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_generate_voice(**kwargs):
+        called.update(kwargs)
+
+    monkeypatch.setattr("cli.ai_voice.generate_voice", fake_generate_voice)
+
+    cfg = tmp_path / "config.toml"
+    progress = tmp_path / ".cache/progress.json"
+    out_dir = tmp_path / "out"
+    result = runner.invoke(
+        app,
+        [
+            "--config-path",
+            str(cfg),
+            "--no-color",
+            "voice",
+            "--input-file",
+            str(progress),
+            "--output-dir",
+            str(out_dir),
+            "--provider",
+            "HUME_AI",
+            "--allowed-regex",
+            "^keep",
+            "--ignore-regex",
+            "skip",
+            "--stop-after",
+            "2",
+            "--audio-format",
+            "wav",
+        ],
+    )
+    assert result.exit_code == 0
+    assert called["input_file"] == Path(progress)
+    assert called["output_dir"] == Path(out_dir)
+    assert called["provider"] == "HUME_AI"
+    assert called["allowed_regex"] == "^keep"
+    assert called["ignore_regex"] == "skip"
+    assert called["stop_after"] == 2
+    assert called["audio_format"] == "wav"
+    assert called["config_path"] == cfg
+    assert called["color"] is False
