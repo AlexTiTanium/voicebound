@@ -34,8 +34,8 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-extend-select = ["TCH"]
-ignore = ["TCH003"]
+extend-select = ["TC"]
+ignore = ["TC003"]
 
 [tool.mypy]
 python_version = "3.11"
