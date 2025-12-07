@@ -17,13 +17,6 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 ## Configuration
 - Start from the sample: `cp config.example.toml config.toml` and add your API keys (do not commit secrets).
 - Required keys: `[openai].api_key` for translation, `[hume_ai].api_key` for voice.
-- Precedence for config path:
-  1. `--config-path` CLI flag
-  2. `VOICEBOUND_CONFIG` env var
-  3. `./config.toml`
-  4. `~/.config/voicebound/config.toml`
-- Defaults live in `[translate]` and `[voice]`; set paths, regex filters, model names, workers, backoff, jitter, target_language, etc. Override via CLI flags when needed.
-- Logging: `--log-level` or `VOICEBOUND_LOG_LEVEL`; `--no-color` disables ANSI.
 
 ## CLI usage
 - Global flags: `--config-path/-c`, `--log-level/-l`, `--no-color`, `--version`.
