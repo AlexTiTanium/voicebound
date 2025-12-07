@@ -37,6 +37,7 @@ strings.xml
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
 
 # Ruff cache
 .ruff_cache/
