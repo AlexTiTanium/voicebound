@@ -378,7 +378,9 @@ def typer_command(
     target_language: Optional[str] = typer.Option(
         None, help="Target language for voice content (metadata only)."
     ),
-    allowed_regex: Optional[str] = typer.Option(None, help="Only process keys matching this regex."),
+    allowed_regex: Optional[str] = typer.Option(
+        None, help="Only process keys matching this regex."
+    ),
     ignore_regex: Optional[str] = typer.Option(None, help="Skip keys matching this regex."),
     stop_after: Optional[int] = typer.Option(None, help="Stop after N items (0 for no limit)."),
     audio_format: Optional[str] = typer.Option(
