@@ -1,11 +1,9 @@
-import json
-import sys
 from pathlib import Path
 
 import pytest
 from loguru import logger
 
-from voicebound import utils
+import utils
 
 
 def test_load_config_and_get_value(tmp_path: Path):

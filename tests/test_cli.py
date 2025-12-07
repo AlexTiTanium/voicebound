@@ -4,7 +4,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from voicebound.cli import app
+from cli import app
 
 runner = CliRunner()
 
@@ -36,7 +36,7 @@ def test_cli_voice_help():
 
 
 def test_cli_main_entry(monkeypatch):
-    cli_path = Path(__file__).resolve().parents[1] / "src/voicebound/cli.py"
+    cli_path = Path(__file__).resolve().parents[1] / "src/cli.py"
     monkeypatch.setattr("sys.argv", ["voicebound", "--help"])
     try:
         runpy.run_path(cli_path, run_name="__main__")

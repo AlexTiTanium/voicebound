@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import typer
 
-from voicebound.commands import ai_translate, ai_voice
+from commands import ai_translate, ai_voice
 
 app = typer.Typer(help="Voicebound CLI utilities.")
 

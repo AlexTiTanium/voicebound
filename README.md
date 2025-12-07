@@ -29,8 +29,9 @@ Utilities for translating and generating audio from text assets.
   - Writes audio files to `out/hume/`
 
 ## Project layout
-- Command implementations live in `src/voicebound/commands/`.
-- Shared helpers and logging live in `src/voicebound/`.
+- CLI entrypoint: `src/cli.py`
+- Command implementations live in `src/commands/`.
+- Shared helpers and logging live in `src/utils.py`.
 
 ## Tests
 - Install deps (or re-run installer): `./venv/bin/pip install -r requirements.txt`

@@ -11,7 +11,7 @@ import requests
 import typer
 from loguru import logger
 
-from voicebound.utils import (
+from utils import (
     PROJECT_ROOT,
     RateLimiter,
     configure_logging,

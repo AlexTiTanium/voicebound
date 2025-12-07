@@ -18,7 +18,7 @@ ignore_regex = ""
 dry_run = false
 max_workers = 20
 count_tokens_enabled = true
-target_language = "Russian"
+target_language = "Spain"
 provider = "openai"
 
 [voice]
@@ -32,5 +32,5 @@ max_workers = 4
 request_delay_seconds = 5.5
 max_retries = 3
 backoff_seconds = [1, 2, 4]
-target_language = "Russian"
+target_language = "Spain"
 provider = "HUME_AI"

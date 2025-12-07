@@ -1,12 +1,12 @@
-import runpy
 import re
+import runpy
 from pathlib import Path
 from threading import Lock
 from xml.etree import ElementTree as ET
 
 import pytest
 
-from voicebound.commands import ai_translate
+from commands import ai_translate
 
 
 class DummyEncoding:
@@ -169,7 +169,9 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     config_path = write_config(tmp_path)
     write_strings(tmp_path)
     # Disable token counting to hit zero-token branch
-    cfg_text = config_path.read_text(encoding="utf-8").replace("count_tokens_enabled = true", "count_tokens_enabled = false")
+    cfg_text = config_path.read_text(encoding="utf-8").replace(
+        "count_tokens_enabled = true", "count_tokens_enabled = false"
+    )
     cfg_text = cfg_text.replace('allowed_regex = "^chp10_"', 'allowed_regex = "^empty"')
     config_path.write_text(cfg_text, encoding="utf-8")
 
@@ -185,7 +187,9 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     assert ai_translate.clean_text(None) is None
 
     # trigger warning path
-    cfg_text = config_path.read_text(encoding="utf-8").replace('provider = "openai"', 'provider = "other"')
+    cfg_text = config_path.read_text(encoding="utf-8").replace(
+        'provider = "openai"', 'provider = "other"'
+    )
     config_path.write_text(cfg_text, encoding="utf-8")
 
     ai_translate.translate_strings(
@@ -196,7 +200,10 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
 
     # call translate_text directly
     dummy_client = DummyOpenAI("k", "Hola mundo")
-    assert ai_translate.translate_text(dummy_client, "hola", "gpt-5-nano", "Spanish") == "Hola mundo"
+    assert (
+        ai_translate.translate_text(dummy_client, "hola", "gpt-5-nano", "Spanish")
+        == "Hola mundo"
+    )
 
     # _print_dry_run with payload
     ai_translate._print_dry_run([("a", None, ("dry-run", 1, "p"))])
@@ -300,7 +307,7 @@ def test_ai_translate_main_entry(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["voicebound-translate", "--help"])
     try:
         runpy.run_path(
-            Path(__file__).resolve().parents[1] / "src/voicebound/commands/ai_translate.py",
+            Path(__file__).resolve().parents[1] / "src/commands/ai_translate.py",
             run_name="__main__",
         )
     except SystemExit as exc:

@@ -1,11 +1,10 @@
 import runpy
 from pathlib import Path
 
+import pytest
 import requests
 
-import pytest
-
-from voicebound.commands import ai_voice
+from commands import ai_voice
 
 
 class DummyResponse:
@@ -221,7 +220,9 @@ def test_attempt_send_non_200(monkeypatch, tmp_path):
         sleeps.append(seconds)
 
     monkeypatch.setattr(ai_voice.time, "sleep", fake_sleep)
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad"))
+    monkeypatch.setattr(
+        ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad")
+    )
     success, msg = ai_voice.attempt_send(
         payload={},
         headers={},
@@ -364,7 +365,7 @@ def test_ai_voice_main_entry(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["voicebound-voice", "--help"])
     try:
         runpy.run_path(
-            Path(__file__).resolve().parents[1] / "src/voicebound/commands/ai_voice.py",
+            Path(__file__).resolve().parents[1] / "src/commands/ai_voice.py",
             run_name="__main__",
         )
     except SystemExit as exc:

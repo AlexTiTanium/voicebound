@@ -13,7 +13,7 @@ import typer
 from loguru import logger
 from openai import OpenAI
 
-from voicebound.utils import (
+from utils import (
     PROJECT_ROOT,
     configure_logging,
     ensure_directory,
