@@ -24,7 +24,7 @@ REQUIRED_CONFIG = {
 
 
 def configure_logging(level: str | None = None, *, color: bool = True) -> None:
-    """Configure loguru to log to stdout once per process (synchronous sink)."""
+    """Configure loguru to log to stderr once per process (keeps stdout clean for progress)."""
     log_level = level or os.getenv("VOICEBOUND_LOG_LEVEL", "INFO")
     fmt = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message}"
@@ -32,7 +32,7 @@ def configure_logging(level: str | None = None, *, color: bool = True) -> None:
         else "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
     )
     logger.remove()
-    logger.add(sys.stdout, level=log_level, format=fmt, enqueue=False)
+    logger.add(sys.stderr, level=log_level, format=fmt, enqueue=False)
 
 
 def resolve_config_path(config_path: Path | None = None) -> Path:
