@@ -9,22 +9,22 @@ runner = CliRunner()
 
 
 def test_cli_help():
-    result = runner.invoke(app, ["--help"])
+    result = runner.invoke(app, ["--help"], color=False)
     assert result.exit_code == 0
     assert "translate" in result.stdout
     assert "voice" in result.stdout
 
 
 def test_cli_translate_help():
-    result = runner.invoke(app, ["translate", "--help"])
+    result = runner.invoke(app, ["translate", "--help"], color=False)
     assert result.exit_code == 0
-    assert "input-file" in result.stdout
+    assert "--input-file" in result.stdout
 
 
 def test_cli_voice_help():
-    result = runner.invoke(app, ["voice", "--help"])
+    result = runner.invoke(app, ["voice", "--help"], color=False)
     assert result.exit_code == 0
-    assert "output-dir" in result.stdout
+    assert "--output-dir" in result.stdout
 
 
 def test_cli_main_entry(monkeypatch):
