@@ -1,0 +1,32 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+
+# Virtual environments
+.venv/
+venv/
+
+# Tooling / IDE
+.idea/
+.vscode/
+.DS_Store
+
+# Local environment/config
+.env
+.env.*
+
+# Logs / transient outputs
+*.log
+out/
+
+# Cache directory
+.cache/
+
+# Out directory, actual script outputs
+out/
+
+# Config file, do not commit sensitive info
+config.toml
+
+# String input default file
+strings.xml

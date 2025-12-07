@@ -1,0 +1,6 @@
+# Copy this file to config.toml and fill in your API keys
+[openai]
+api_key = "sk-..."
+
+[hume_ai]
+api_key = "..."
