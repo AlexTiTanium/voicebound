@@ -186,7 +186,8 @@ def translate_strings(
     client = OpenAI(api_key=api_key)
 
     results = []
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
         future_map = {
             executor.submit(
                 process_string,
@@ -212,6 +213,12 @@ def translate_strings(
                 name = future_map[future].get("name")
                 logger.error(f"[ERROR] Unhandled exception for {name}: {exc}")
                 results.append((name, None, ("error", str(exc))))
+    except KeyboardInterrupt:
+        logger.warning("[TRANSLATE] Interrupted by user. Cancelling pending tasks.")
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise SystemExit(130)
+    finally:
+        executor.shutdown(wait=True, cancel_futures=True)
 
     if dry_run:
         _print_dry_run(results)

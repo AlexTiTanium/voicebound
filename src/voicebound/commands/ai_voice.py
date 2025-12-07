@@ -9,6 +9,7 @@ from typing import Any, Dict
 import requests
 import typer
 from loguru import logger
+from threading import Event
 
 from voicebound.utils import (
     PROJECT_ROOT,
@@ -70,6 +71,7 @@ def handle_entry(
     split_utterances: bool,
     target_language: str,
     octave_version: str,
+    stop_event: Event,
 ) -> None:
     """Process a single progress entry end-to-end (thread-safe)."""
     logger.info(f"[VOICE] {key} start")
@@ -89,6 +91,7 @@ def handle_entry(
         rate_limiter=rate_limiter,
         max_retries=max_retries,
         backoff_seconds=backoff_seconds,
+        stop_event=stop_event,
     )
 
     if not success:
@@ -105,6 +108,7 @@ def attempt_send(
     rate_limiter: RateLimiter,
     max_retries: int,
     backoff_seconds: tuple[int, ...],
+    stop_event: Event,
 ) -> tuple[bool, str]:
     """Handle retries, backoff, and file write for one payload; obeys rate limit."""
     attempt = 0
@@ -112,6 +116,8 @@ def attempt_send(
     error_message = ""
 
     while attempt < max_retries and not success:
+        if stop_event.is_set():
+            return False, "interrupted"
         logger.debug(f"[VOICE] {out_path.stem} attempt {attempt + 1}")
         rate_limiter.wait()
         attempt += 1
@@ -122,6 +128,9 @@ def attempt_send(
                 success = True
             else:
                 error_message = f"HTTP {response.status_code}: {response.text}"
+        except KeyboardInterrupt:
+            logger.warning(f"[VOICE] {out_path.stem} interrupted during attempt {attempt}")
+            raise
         except requests.RequestException as exc:
             error_message = str(exc)
 
@@ -171,6 +180,7 @@ def generate_voice(
     target_language = target_language or voice_cfg.get("target_language", "Russian")
     octave_version = voice_cfg.get("octave_version", "2")
 
+    stop_event = Event()
     if not input_file.exists():
         raise SystemExit(f"Progress file not found: {input_file}. Run translate first.")
 
@@ -214,7 +224,9 @@ def generate_voice(
         return
 
     logger.info(f"[VOICE] Starting generation with {max_workers} workers.")
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    interrupted = False
+    try:
         futures = []
         for key, text in worklist:
             out_path = output_dir / f"{key}.{audio_format}"
@@ -235,13 +247,30 @@ def generate_voice(
                     split_utterances=split_utterances,
                     target_language=target_language,
                     octave_version=octave_version,
+                    stop_event=stop_event,
                 )
             )
         for future in futures:
             try:
                 future.result()
+            except KeyboardInterrupt:
+                logger.warning("[VOICE] Interrupted; stopping remaining futures.")
+                interrupted = True
+                stop_event.set()
+                executor.shutdown(wait=False, cancel_futures=True)
+                raise SystemExit(130)
             except Exception as exc:  # pragma: no cover - safeguard
                 logger.error(f"[VOICE] Unhandled exception: {exc}")
+    except KeyboardInterrupt:
+        logger.warning("[VOICE] Interrupted by user. Cancelling pending tasks.")
+        interrupted = True
+        stop_event.set()
+        executor.shutdown(wait=False, cancel_futures=True)
+        raise SystemExit(130)
+    finally:
+        # If we were interrupted, do not wait on inflight requests.
+        if not interrupted:
+            executor.shutdown(wait=True, cancel_futures=True)
 
     logger.info("[VOICE] Run complete.")
 
