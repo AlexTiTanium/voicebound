@@ -1,3 +1,4 @@
+import re
 import runpy
 from pathlib import Path
 
@@ -8,23 +9,30 @@ from voicebound.cli import app
 runner = CliRunner()
 
 
+def strip_ansi(text: str) -> str:
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def test_cli_help():
     result = runner.invoke(app, ["--help"], color=False)
     assert result.exit_code == 0
-    assert "translate" in result.stdout
-    assert "voice" in result.stdout
+    output = strip_ansi(result.stdout)
+    assert "translate" in output
+    assert "voice" in output
 
 
 def test_cli_translate_help():
     result = runner.invoke(app, ["translate", "--help"], color=False)
     assert result.exit_code == 0
-    assert "--input-file" in result.stdout
+    output = strip_ansi(result.stdout)
+    assert "--input-file" in output
 
 
 def test_cli_voice_help():
     result = runner.invoke(app, ["voice", "--help"], color=False)
     assert result.exit_code == 0
-    assert "--output-dir" in result.stdout
+    output = strip_ansi(result.stdout)
+    assert "--output-dir" in output
 
 
 def test_cli_main_entry(monkeypatch):
