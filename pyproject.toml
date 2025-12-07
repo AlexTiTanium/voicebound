@@ -20,5 +20,8 @@ dependencies = [
 [project.scripts]
 voicebound = "voicebound.cli:app"
 
+[tool.setuptools]
+package-dir = {"" = "src"}
+
 [tool.setuptools.packages.find]
 where = ["src"]
