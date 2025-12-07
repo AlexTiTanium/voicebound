@@ -35,7 +35,17 @@ def build_payload(
     split_utterances: bool,
     octave_version: str,
 ) -> Dict[str, Any]:
-    """Construct request payload for a single utterance."""
+    """Construct the Hume request payload for one utterance.
+
+    Args:
+        text: Utterance content.
+        model: TTS model name.
+        voice_name: Voice to request.
+        provider: Voice provider identifier.
+        audio_format: Audio format string (e.g., mp3).
+        split_utterances: Whether to split utterances.
+        octave_version: API version to target.
+    """
     return {
         "model": model,
         "format": {"type": audio_format},
@@ -73,7 +83,25 @@ def handle_entry(
     octave_version: str,
     stop_event: Event,
 ) -> None:
-    """Process a single progress entry end-to-end (thread-safe)."""
+    """Process one entry end-to-end: build payload, send, and persist result.
+
+    Args:
+        key: Progress key for naming output.
+        text: Text to synthesize.
+        headers: HTTP headers including API key.
+        rate_limiter: Shared rate limiter instance.
+        out_path: Destination file path.
+        max_retries: How many retries to attempt.
+        backoff_seconds: Backoff schedule between retries.
+        model: TTS model to use.
+        voice_name: Voice name.
+        provider: Provider identifier.
+        audio_format: Audio format string.
+        split_utterances: Whether to split utterances server-side.
+        target_language: Informational target language string.
+        octave_version: API version for Octave.
+        stop_event: Event used to cancel in-flight work.
+    """
     logger.info(f"[VOICE] {key} start")
     payload = build_payload(
         text,
@@ -154,7 +182,19 @@ def generate_voice(
     provider: str | None = None,
     config_path: Path = PROJECT_ROOT / "config.toml",
 ) -> None:
-    """Generate voice files from cached translations."""
+    """Generate voice files from cached translations using Hume.
+
+    Args:
+        input_file: Progress JSON path (overrides config when provided).
+        output_dir: Directory to write audio outputs.
+        target_language: Descriptive target language string.
+        allowed_regex: Regex for allowed keys.
+        ignore_regex: Regex for keys to skip.
+        stop_after: Limit number of items to process.
+        audio_format: Audio format extension/type.
+        provider: Voice provider identifier.
+        config_path: Path to config.toml.
+    """
     configure_logging()
     config = load_config(config_path)
     api_key = get_config_value(config, "hume_ai", "api_key")
@@ -292,7 +332,7 @@ def typer_command(
     ),
     config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
-    """Typer-friendly wrapper."""
+    """Typer-friendly CLI wrapper for generate_voice."""
     generate_voice(
         input_file=input_file,
         output_dir=output_dir,

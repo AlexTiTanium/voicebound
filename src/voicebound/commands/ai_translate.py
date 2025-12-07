@@ -39,6 +39,7 @@ def clean_text(text: str | None) -> str | None:
 
 
 def translate_text(client: OpenAI, text: str, model: str, target_language: str) -> str:
+    """Call the OpenAI chat completion API to translate text into the target language."""
     prompt = f"""
 Translate the following text into {target_language} in a literary, artistic manner.
 Do not add anything, do not modify structure, only translate the meaning:
@@ -54,6 +55,7 @@ Do not add anything, do not modify structure, only translate the meaning:
 
 
 def count_tokens(encoding, text: str) -> int:
+    """Return the token count for the given text using the provided encoding."""
     return len(encoding.encode(text))
 
 
@@ -119,6 +121,7 @@ def process_string(
 
 
 def apply_translations(root, results: Iterable[tuple[str | None, str | None, str]]) -> None:
+    """Apply translated text back to the XML tree for eligible entries."""
     for name, text, status in results:
         if status in ("translated", "loaded", "skipped"):
             text = clean_text(text)
@@ -141,6 +144,7 @@ def translate_strings(
     target_language: str | None = None,
     config_path: Path = PROJECT_ROOT / "config.toml",
 ) -> None:
+    """Translate strings.xml using OpenAI according to config and CLI overrides."""
     configure_logging()
     config = load_config(config_path)
     api_key = get_config_value(config, "openai", "api_key")
@@ -240,6 +244,7 @@ def translate_strings(
 
 
 def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> None:
+    """Print/log a dry-run summary showing counts and token estimates."""
     total_tokens = 0
     count = 0
 
@@ -271,6 +276,7 @@ def typer_command(
     target_language: str | None = typer.Option(None, help="Target language to translate into."),
     config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
+    """Typer CLI wrapper for translate_strings."""
     translate_strings(
         input_file=input_file,
         output_file=output_file,
