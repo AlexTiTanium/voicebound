@@ -388,7 +388,8 @@ def typer_command(
 ) -> None:
     """Typer-friendly CLI wrapper for generate_voice."""
     obj = ctx.ensure_object(dict)
-    cfg_path = config_path or obj.get("config_path")
+    cfg_raw = config_path or obj.get("config_path")
+    cfg_path = Path(cfg_raw) if cfg_raw else None
     log_level = obj.get("log_level")
     color = obj.get("color", True)
     generate_voice(

@@ -1,8 +1,10 @@
 import runpy
 from pathlib import Path
+from typing import cast
 
 import pytest
 import requests
+import typer
 
 from commands import ai_voice
 
@@ -375,7 +377,7 @@ def test_voice_typer_command(monkeypatch, tmp_path):
     monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
 
     ai_voice.typer_command(
-        DummyCtx(),
+        cast(typer.Context, DummyCtx()),
         input_file=tmp_path / ".cache/progress.json",
         output_dir=tmp_path / "out/hume",
         config_path=config_path,
@@ -390,7 +392,7 @@ def test_ai_voice_main_entry(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["voicebound-voice", "--help"])
     try:
         runpy.run_path(
-            Path(__file__).resolve().parents[1] / "src/commands/ai_voice.py",
+            str(Path(__file__).resolve().parents[1] / "src/commands/ai_voice.py"),
             run_name="__main__",
         )
     except SystemExit as exc:

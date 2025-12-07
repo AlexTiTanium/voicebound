@@ -1,6 +1,7 @@
 import re
 import runpy
 from pathlib import Path
+from typing import cast
 
 import pytest
 import typer
@@ -55,7 +56,7 @@ def test_cli_main_entry(monkeypatch):
     cli_path = Path(__file__).resolve().parents[1] / "src/cli.py"
     monkeypatch.setattr("sys.argv", ["voicebound", "--help"])
     try:
-        runpy.run_path(cli_path, run_name="__main__")
+        runpy.run_path(str(cli_path), run_name="__main__")
     except SystemExit as exc:
         assert exc.code == 0
 
@@ -69,7 +70,13 @@ def test_version_callback_prints_and_exits(capsys):
 def test_main_without_subcommand_uses_help(capsys):
     ctx = DummyCtx()
     with pytest.raises(typer.Exit):
-        cli.main(ctx, config_path=None, log_level="INFO", no_color=True, version=False)
+        cli.main(
+            cast(typer.Context, ctx),
+            config_path=None,
+            log_level="INFO",
+            no_color=True,
+            version=False,
+        )
     out = capsys.readouterr().out
     assert "HELP" in out
     assert ctx.obj["color"] is False

@@ -2,16 +2,18 @@ import re
 import runpy
 from pathlib import Path
 from threading import Lock
+from typing import cast
 from xml.etree import ElementTree as ET
 
 import pytest
+import typer
 
 from commands import ai_translate
 
 
 class DummyEncoding:
     def encode(self, text: str) -> list[int]:
-        return list(text)
+        return [ord(ch) for ch in text]
 
 
 class DummyCompletionResponse:
@@ -237,7 +239,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=DummyOpenAI("k", "Hola"),
+        client=cast(object, DummyOpenAI("k", "Hola")),
         progress_file=tmp_path / "p.json",
         model="m",
         dry_run=False,
@@ -254,7 +256,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=DummyOpenAI("k", "Hola"),
+        client=cast(object, DummyOpenAI("k", "Hola")),
         progress_file=tmp_path / "p2.json",
         model="m",
         dry_run=True,
@@ -271,7 +273,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=DummyOpenAI("k", "Hola"),
+        client=cast(object, DummyOpenAI("k", "Hola")),
         progress_file=progress_file,
         model="m",
         dry_run=False,
@@ -309,7 +311,7 @@ def test_translate_typer_command(monkeypatch, tmp_path):
     monkeypatch.setattr(ai_translate, "translate_strings", fake_translate_strings)
 
     ai_translate.typer_command(
-        DummyCtx(),
+        cast(typer.Context, DummyCtx()),
         input_file=Path("a.xml"),
         output_file=Path("b.xml"),
         allowed_regex="^x",
@@ -328,7 +330,7 @@ def test_ai_translate_main_entry(monkeypatch, tmp_path):
     monkeypatch.setattr("sys.argv", ["voicebound-translate", "--help"])
     try:
         runpy.run_path(
-            Path(__file__).resolve().parents[1] / "src/commands/ai_translate.py",
+            str(Path(__file__).resolve().parents[1] / "src/commands/ai_translate.py"),
             run_name="__main__",
         )
     except SystemExit as exc:

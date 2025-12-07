@@ -5,7 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from html import unescape
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, Tuple
+from typing import Any, Iterable, Tuple, TypedDict
 from xml.etree import ElementTree as ET
 
 import tiktoken
@@ -34,6 +34,15 @@ from utils import (
 )
 
 
+class Summary(TypedDict):
+    translated: int
+    skipped: int
+    loaded: int
+    ignored: int
+    empty: int
+    errors: list[str]
+
+
 def clean_text(text: str | None) -> str | None:
     """Convert escaped markers to real characters; unescape XML entities."""
     if text is None:
@@ -47,7 +56,7 @@ def clean_text(text: str | None) -> str | None:
     return unescape(text)
 
 
-def translate_text(client: OpenAI, text: str, model: str, target_language: str) -> str:
+def translate_text(client: Any, text: str, model: str, target_language: str) -> str:
     """Call the OpenAI chat completion API to translate text into the target language."""
     prompt = f"""
 Translate the following text into {target_language} in a literary, artistic manner.
@@ -60,7 +69,8 @@ Do not add anything, do not modify structure, only translate the meaning:
         model=model,
         messages=[{"role": "user", "content": prompt}],
     )
-    return response.choices[0].message.content.strip()
+    content = response.choices[0].message.content or ""
+    return content.strip()
 
 
 def count_tokens(encoding, text: str) -> int:
@@ -75,7 +85,7 @@ def process_string(
     ignore_pattern: re.Pattern[str],
     done: dict,
     progress_lock: Lock,
-    client: OpenAI,
+    client: Any,
     progress_file: Path,
     model: str,
     dry_run: bool,
@@ -129,7 +139,9 @@ def process_string(
     return name, translated, "translated"
 
 
-def apply_translations(root, results: Iterable[tuple[str | None, str | None, str]]) -> None:
+def apply_translations(
+    root, results: Iterable[tuple[str | None, str | None, str | tuple]]
+) -> None:
     """Apply translated text back to the XML tree for eligible entries."""
     for name, text, status in results:
         if status in ("translated", "loaded", "skipped"):
@@ -151,7 +163,7 @@ def translate_strings(
     model: str | None = None,
     count_tokens_enabled: bool | None = None,
     target_language: str | None = None,
-    config_path: Path = PROJECT_ROOT / "config.toml",
+    config_path: Path | None = PROJECT_ROOT / "config.toml",
     log_level: str | None = None,
     color: bool = True,
 ) -> None:
@@ -311,7 +323,8 @@ def typer_command(
 ) -> None:
     """Typer CLI wrapper for translate_strings."""
     obj = ctx.ensure_object(dict)
-    cfg_path = config_path or obj.get("config_path")
+    cfg_raw = config_path or obj.get("config_path")
+    cfg_path = Path(cfg_raw) if cfg_raw else None
     log_level = obj.get("log_level")
     color = obj.get("color", True)
     translate_strings(
@@ -329,8 +342,8 @@ def typer_command(
     )
 
 
-def _summarize_results(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> dict:
-    summary = {
+def _summarize_results(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> Summary:
+    summary: Summary = {
         "translated": 0,
         "skipped": 0,
         "loaded": 0,

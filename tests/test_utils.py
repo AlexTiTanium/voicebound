@@ -66,7 +66,7 @@ def test_rate_limiter_waits(monkeypatch):
 
 
 def test_get_config_value_required(tmp_path: Path):
-    cfg = {"section": {}}
+    cfg: dict[str, dict[str, str]] = {"section": {}}
     with pytest.raises(SystemExit):
         utils.get_config_value(cfg, "section", "missing")
 

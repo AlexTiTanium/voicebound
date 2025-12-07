@@ -4,7 +4,7 @@ VENV ?= ./venv
 PYTEST = $(VENV)/bin/pytest
 RUFF = $(VENV)/bin/ruff
 
-.PHONY: install lint format test translate voice
+.PHONY: install lint format type test translate voice
 
 install:
 	$(PY) -m venv $(VENV)
@@ -13,6 +13,9 @@ install:
 
 lint:
 	$(RUFF) check .
+
+type:
+	$(VENV)/bin/mypy src tests
 
 format:
 	$(RUFF) format .
