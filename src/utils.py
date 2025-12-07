@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -11,26 +12,71 @@ from loguru import logger
 
 # Project paths
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = PROJECT_ROOT / "config.toml"
+DEFAULT_LOCAL_CONFIG = PROJECT_ROOT / "config.toml"
+DEFAULT_XDG_CONFIG = (
+    Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / "voicebound" / "config.toml"
+)
+
+REQUIRED_CONFIG = {
+    "openai": ["api_key"],
+    "hume_ai": ["api_key"],
+}
 
 
-def configure_logging(level: str | None = None) -> None:
+def configure_logging(level: str | None = None, *, color: bool = True) -> None:
     """Configure loguru to log to stdout once per process (synchronous sink)."""
     log_level = level or os.getenv("VOICEBOUND_LOG_LEVEL", "INFO")
+    fmt = (
+        "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message}"
+        if color
+        else "{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}"
+    )
     logger.remove()
-    logger.add(
-        sys.stdout,
-        level=log_level,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
-        enqueue=False,
+    logger.add(sys.stdout, level=log_level, format=fmt, enqueue=False)
+
+
+def resolve_config_path(config_path: Path | None = None) -> Path:
+    """Resolve config path with precedence: explicit > env > local > XDG."""
+    env_path = os.getenv("VOICEBOUND_CONFIG")
+    candidates = [
+        Path(config_path) if config_path else None,
+        Path(env_path) if env_path else None,
+        DEFAULT_LOCAL_CONFIG,
+        DEFAULT_XDG_CONFIG,
+    ]
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+    raise SystemExit(
+        f"No config.toml found. Checked: {[str(c) for c in candidates if c is not None]}"
     )
 
 
-def load_config(config_path: Path = CONFIG_PATH) -> dict:
-    """Load full config file."""
-    if not config_path.exists():
-        raise SystemExit(f"Missing config file: {config_path}.")
-    return toml.load(config_path)
+def load_config(config_path: Path | None = None) -> dict:
+    """Load full config file with validation."""
+    if config_path is not None:
+        if not config_path.exists():
+            raise SystemExit(f"Missing config file: {config_path}.")
+        path = config_path
+    else:
+        path = resolve_config_path(None)
+    data = toml.load(path)
+    validate_config(data, path)
+    return data
+
+
+def validate_config(config: dict, path: Path) -> None:
+    """Ensure required sections/keys exist and are non-empty."""
+    missing: list[str] = []
+    for section, keys in REQUIRED_CONFIG.items():
+        section_data = config.get(section, {})
+        for key in keys:
+            if not section_data.get(key):
+                missing.append(f"[{section}].{key}")
+    if missing:
+        raise SystemExit(
+            f"Missing required config keys in {path}: {', '.join(missing)}."
+        )
 
 
 def get_config_value(
@@ -77,7 +123,7 @@ class RateLimiter:
             if self._last is not None:
                 sleep_for = self.min_interval - (now - self._last)
                 if sleep_for > 0:
-                    logger.debug(f"Rate limiter sleeping {sleep_for:.2f}s")
+                    logger.debug(f"[RATE] sleeping {sleep_for:.2f}s")
                     time.sleep(sleep_for)
                     now = time.perf_counter()
             self._last = now
@@ -87,3 +133,11 @@ def resolve_path(path_value: str | Path, base: Path = PROJECT_ROOT) -> Path:
     """Resolve paths relative to project root when not absolute."""
     path = Path(path_value)
     return path if path.is_absolute() else (base / path)
+
+
+def compile_regex(pattern: str, *, label: str) -> re.Pattern[str]:
+    """Compile regex with a clear error if invalid."""
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise SystemExit(f"Invalid {label} regex '{pattern}': {exc}") from exc

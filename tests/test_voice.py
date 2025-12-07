@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 import requests
+import typer
 
 from commands import ai_voice
 
@@ -14,10 +15,26 @@ class DummyResponse:
         self.text = text
 
 
+class DummyCtx:
+    def __init__(self):
+        self.obj = {}
+
+    def ensure_object(self, typ):
+        if not isinstance(self.obj, typ):
+            self.obj = typ()
+        return self.obj
+
+    def get(self, key, default=None):
+        return self.obj.get(key, default)
+
+
 def write_config(tmp_path: Path) -> Path:
     config = tmp_path / "config.toml"
     config.write_text(
         """
+[openai]
+api_key = "dummy-openai"
+
 [hume_ai]
 api_key = "dummy-hume"
 model = "octave"
@@ -163,6 +180,8 @@ def test_attempt_send_stops_on_event(monkeypatch, tmp_path):
         rate_limiter=ai_voice.RateLimiter(0),
         max_retries=3,
         backoff_seconds=(0,),
+        jitter_fraction=0.0,
+        max_elapsed_seconds=None,
         stop_event=stop_event,
     )
 
@@ -208,6 +227,8 @@ def test_handle_entry_error_branch(monkeypatch, tmp_path):
         split_utterances=False,
         target_language="es",
         octave_version="2",
+        jitter_fraction=0.0,
+        max_elapsed_seconds=None,
         stop_event=ai_voice.Event(),
     )
     assert called["ok"]
@@ -230,6 +251,8 @@ def test_attempt_send_non_200(monkeypatch, tmp_path):
         rate_limiter=ai_voice.RateLimiter(0),
         max_retries=2,
         backoff_seconds=(0, 0),
+        jitter_fraction=0.0,
+        max_elapsed_seconds=None,
         stop_event=ai_voice.Event(),
     )
     assert success is False
@@ -249,6 +272,8 @@ def test_attempt_send_request_exception(monkeypatch, tmp_path):
         rate_limiter=ai_voice.RateLimiter(0),
         max_retries=1,
         backoff_seconds=(0,),
+        jitter_fraction=0.0,
+        max_elapsed_seconds=None,
         stop_event=ai_voice.Event(),
     )
     assert success is False
@@ -351,6 +376,7 @@ def test_voice_typer_command(monkeypatch, tmp_path):
     monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
 
     ai_voice.typer_command(
+        DummyCtx(),
         input_file=tmp_path / ".cache/progress.json",
         output_dir=tmp_path / "out/hume",
         config_path=config_path,
@@ -370,3 +396,40 @@ def test_ai_voice_main_entry(monkeypatch, tmp_path):
         )
     except SystemExit as exc:
         assert exc.code == 0
+
+
+def test_attempt_send_max_elapsed(monkeypatch, tmp_path):
+    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad"))
+    monkeypatch.setattr(ai_voice.time, "sleep", lambda *_: None)
+    success, msg = ai_voice.attempt_send(
+        payload={},
+        headers={},
+        out_path=tmp_path / "x.mp3",
+        rate_limiter=ai_voice.RateLimiter(0),
+        max_retries=2,
+        backoff_seconds=(0,),
+        jitter_fraction=0.0,
+        max_elapsed_seconds=0,
+        stop_event=ai_voice.Event(),
+    )
+    assert success is False
+    assert "max elapsed" in msg
+
+
+def test_generate_voice_reports_failures(monkeypatch, tmp_path):
+    config_path = write_config(tmp_path)
+    progress = write_progress(tmp_path)
+    out_dir = tmp_path / "out/hume"
+
+    def boom(**kwargs):
+        raise ValueError("boom")
+
+    monkeypatch.setattr(ai_voice, "handle_entry", boom)
+    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
+
+    ai_voice.generate_voice(
+        config_path=config_path,
+        input_file=progress,
+        output_dir=out_dir,
+        allowed_regex="^keep",
+    )

@@ -5,6 +5,7 @@ from threading import Lock
 from xml.etree import ElementTree as ET
 
 import pytest
+import typer
 
 from commands import ai_translate
 
@@ -37,6 +38,19 @@ class DummyOpenAI:
         self.chat = DummyChat(content)
 
 
+class DummyCtx:
+    def __init__(self):
+        self.obj = {}
+
+    def ensure_object(self, typ):
+        if not isinstance(self.obj, typ):
+            self.obj = typ()
+        return self.obj
+
+    def get(self, key, default=None):
+        return self.obj.get(key, default)
+
+
 @pytest.fixture(autouse=True)
 def patch_tiktoken(monkeypatch):
     monkeypatch.setattr(ai_translate.tiktoken, "get_encoding", lambda *_: DummyEncoding())
@@ -49,6 +63,13 @@ def write_config(tmp_path: Path) -> Path:
 [openai]
 api_key = "dummy-key"
 model = "gpt-5-nano"
+
+[hume_ai]
+api_key = "dummy-hume"
+model = "octave"
+voice_name = "ivan"
+octave_version = "2"
+split_utterances = true
 
 [translate]
 input_file = "strings.xml"
@@ -289,6 +310,7 @@ def test_translate_typer_command(monkeypatch, tmp_path):
     monkeypatch.setattr(ai_translate, "translate_strings", fake_translate_strings)
 
     ai_translate.typer_command(
+        DummyCtx(),
         input_file=Path("a.xml"),
         output_file=Path("b.xml"),
         allowed_regex="^x",
@@ -312,3 +334,24 @@ def test_ai_translate_main_entry(monkeypatch, tmp_path):
         )
     except SystemExit as exc:
         assert exc.code == 0
+
+
+def test_translate_reports_errors(monkeypatch, tmp_path):
+    config_path = write_config(tmp_path)
+    write_strings(tmp_path)
+
+    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola"))
+    monkeypatch.setattr(
+        ai_translate, "process_string", lambda *args, **kwargs: ("bad", None, ("error", "boom"))
+    )
+
+    output_file = tmp_path / "out/values/strings.xml"
+    ai_translate.translate_strings(
+        config_path=config_path,
+        input_file=tmp_path / "strings.xml",
+        output_file=output_file,
+        max_workers=1,
+    )
+    assert output_file.exists()
+    summary = ai_translate._summarize_results([("bad", None, ("error", "boom"))])
+    assert summary["errors"] == ["bad"]

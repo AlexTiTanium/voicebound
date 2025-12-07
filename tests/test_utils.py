@@ -10,6 +10,12 @@ def test_load_config_and_get_value(tmp_path: Path):
     cfg = tmp_path / "config.toml"
     cfg.write_text(
         """
+[openai]
+api_key = "dummy"
+
+[hume_ai]
+api_key = "dummy"
+
 [section]
 required_key = "value"
 """,
@@ -63,3 +69,47 @@ def test_get_config_value_required(tmp_path: Path):
     cfg = {"section": {}}
     with pytest.raises(SystemExit):
         utils.get_config_value(cfg, "section", "missing")
+
+
+def test_resolve_config_path_prefers_env(monkeypatch, tmp_path: Path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[openai]
+api_key = "env-openai"
+[hume_ai]
+api_key = "env-hume"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("VOICEBOUND_CONFIG", str(cfg))
+    assert utils.resolve_config_path(None) == cfg
+    data = utils.load_config()
+    assert data["openai"]["api_key"] == "env-openai"
+    monkeypatch.delenv("VOICEBOUND_CONFIG", raising=False)
+
+
+def test_validate_config_missing_required(tmp_path: Path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[openai]
+api_key = "only-openai"
+""",
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit):
+        utils.load_config(cfg)
+
+
+def test_compile_regex_invalid():
+    with pytest.raises(SystemExit):
+        utils.compile_regex("(", label="broken")
+
+
+def test_resolve_config_path_raises_when_missing(monkeypatch):
+    monkeypatch.delenv("VOICEBOUND_CONFIG", raising=False)
+    monkeypatch.setattr(utils, "DEFAULT_LOCAL_CONFIG", Path("/no/such/config.toml"))
+    monkeypatch.setattr(utils, "DEFAULT_XDG_CONFIG", Path("/no/such/xdg/config.toml"))
+    with pytest.raises(SystemExit):
+        utils.resolve_config_path(None)

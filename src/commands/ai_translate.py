@@ -12,9 +12,18 @@ import tiktoken
 import typer
 from loguru import logger
 from openai import OpenAI
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TaskProgressColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
 
 from utils import (
     PROJECT_ROOT,
+    compile_regex,
     configure_logging,
     ensure_directory,
     get_config_value,
@@ -143,9 +152,11 @@ def translate_strings(
     count_tokens_enabled: bool | None = None,
     target_language: str | None = None,
     config_path: Path = PROJECT_ROOT / "config.toml",
+    log_level: str | None = None,
+    color: bool = True,
 ) -> None:
     """Translate strings.xml using OpenAI according to config and CLI overrides."""
-    configure_logging()
+    configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     api_key = get_config_value(config, "openai", "api_key")
     model = model or get_config_value(
@@ -176,6 +187,9 @@ def translate_strings(
     )
     target_language = target_language or translate_cfg.get("target_language", "Russian")
 
+    translate_pattern = compile_regex(allowed_regex, label="allowed")
+    ignore_pattern = compile_regex(ignore_regex, label="ignore")
+
     if not input_file.exists():
         raise SystemExit(f"Input file not found: {input_file}")
 
@@ -190,49 +204,59 @@ def translate_strings(
     tasks = list(root.findall("string"))
 
     if not dry_run:
-        logger.info(f"[INIT] Translating {len(tasks)} strings using {model}.")
+        logger.info(f"[TRANSLATE] Translating {len(tasks)} strings using {model}.")
     else:
-        logger.info(f"[INIT] Dry run enabled for {len(tasks)} strings.")
+        logger.info(f"[TRANSLATE] Dry run enabled for {len(tasks)} strings.")
 
     encoding = tiktoken.get_encoding("o200k_base") if count_tokens_enabled else None
-    translate_pattern = re.compile(allowed_regex)
-    ignore_pattern = re.compile(ignore_regex)
     client = OpenAI(api_key=api_key)
 
     results = []
     executor = ThreadPoolExecutor(max_workers=max_workers)
-    try:
-        future_map = {
-            executor.submit(
-                process_string,
-                node,
-                translate_pattern=translate_pattern,
-                ignore_pattern=ignore_pattern,
-                done=done,
-                progress_lock=progress_lock,
-                client=client,
-                progress_file=progress_file,
-                model=model,
-                dry_run=dry_run,
-                encoding=encoding,
-                target_language=target_language,
-            ): node
-            for node in tasks
-        }
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+    with progress:
+        try:
+            task_id = progress.add_task("[TRANSLATE] Processing", total=len(tasks))
+            future_map = {
+                executor.submit(
+                    process_string,
+                    node,
+                    translate_pattern=translate_pattern,
+                    ignore_pattern=ignore_pattern,
+                    done=done,
+                    progress_lock=progress_lock,
+                    client=client,
+                    progress_file=progress_file,
+                    model=model,
+                    dry_run=dry_run,
+                    encoding=encoding,
+                    target_language=target_language,
+                ): node
+                for node in tasks
+            }
 
-        for future in as_completed(future_map):
-            try:
-                results.append(future.result())
-            except Exception as exc:  # pragma: no cover - safeguard
-                name = future_map[future].get("name")
-                logger.error(f"[ERROR] Unhandled exception for {name}: {exc}")
-                results.append((name, None, ("error", str(exc))))
-    except KeyboardInterrupt:
-        logger.warning("[TRANSLATE] Interrupted by user. Cancelling pending tasks.")
-        executor.shutdown(wait=False, cancel_futures=True)
-        raise SystemExit(130)
-    finally:
-        executor.shutdown(wait=True, cancel_futures=True)
+            for future in as_completed(future_map):
+                try:
+                    results.append(future.result())
+                except Exception as exc:  # pragma: no cover - safeguard
+                    name = future_map[future].get("name")
+                    logger.error(f"[TRANSLATE] Unhandled exception for {name}: {exc}")
+                    results.append((name, None, ("error", str(exc))))
+                finally:
+                    progress.update(task_id, advance=1)
+        except KeyboardInterrupt:
+            logger.warning("[TRANSLATE] Interrupted by user. Cancelling pending tasks.")
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise SystemExit(130)
+        finally:
+            executor.shutdown(wait=True, cancel_futures=True)
 
     if dry_run:
         _print_dry_run(results)
@@ -240,7 +264,15 @@ def translate_strings(
 
     apply_translations(root, results)
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
-    logger.success(f"[WRITE] Output saved to: {output_file}")
+    summary = _summarize_results(results)
+    logger.success(
+        f"[TRANSLATE] Done. translated={summary['translated']} skipped={summary['skipped']} "
+        f"loaded={summary['loaded']} ignored={summary['ignored']} empty={summary['empty']} "
+        f"errors={len(summary['errors'])}"
+    )
+    if summary["errors"]:
+        logger.error(f"[TRANSLATE] Failed entries: {', '.join(summary['errors'])}")
+    logger.success(f"[TRANSLATE] Output saved to: {output_file}")
 
 
 def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> None:
@@ -264,6 +296,7 @@ def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]
 
 
 def typer_command(
+    ctx: typer.Context,
     input_file: Path | None = typer.Option(None, help="Path to the input strings.xml."),
     output_file: Path | None = typer.Option(None, help="Path to write translated XML."),
     allowed_regex: str | None = typer.Option(
@@ -274,9 +307,13 @@ def typer_command(
     max_workers: int | None = typer.Option(None, help="Parallel workers."),
     model: str | None = typer.Option(None, help="OpenAI model to use."),
     target_language: str | None = typer.Option(None, help="Target language to translate into."),
-    config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
+    config_path: Path | None = typer.Option(None, help="Path to config.toml."),
 ) -> None:
     """Typer CLI wrapper for translate_strings."""
+    obj = ctx.ensure_object(dict)
+    cfg_path = config_path or obj.get("config_path")
+    log_level = obj.get("log_level")
+    color = obj.get("color", True)
     translate_strings(
         input_file=input_file,
         output_file=output_file,
@@ -286,8 +323,36 @@ def typer_command(
         max_workers=max_workers,
         model=model,
         target_language=target_language,
-        config_path=config_path,
+        config_path=cfg_path,
+        log_level=log_level,
+        color=color,
     )
+
+
+def _summarize_results(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> dict:
+    summary = {
+        "translated": 0,
+        "skipped": 0,
+        "loaded": 0,
+        "ignored": 0,
+        "empty": 0,
+        "errors": [],
+    }
+    for name, _text, status in results:
+        if status == "translated":
+            summary["translated"] += 1
+        elif status == "skipped":
+            summary["skipped"] += 1
+        elif status == "loaded":
+            summary["loaded"] += 1
+        elif status == "ignored":
+            summary["ignored"] += 1
+        elif status == "empty":
+            summary["empty"] += 1
+        elif isinstance(status, tuple) and status[0] == "error":
+            if name:
+                summary["errors"].append(name)
+    return summary
 
 
 if __name__ == "__main__":
