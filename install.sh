@@ -6,6 +6,13 @@ VENV="$ROOT/venv"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 VENV_PY="$VENV/bin/python"
 VENV_PIP="$VENV/bin/pip"
+NO_ACTIVATE=0
+
+for arg in "$@"; do
+  case "$arg" in
+    --no-activate) NO_ACTIVATE=1 ;;
+  esac
+done
 
 echo "Checking Python..."
 if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
@@ -41,12 +48,18 @@ echo "Upgrading pip..."
 "$VENV_PY" -m pip install --upgrade pip
 
 echo "Installing dependencies..."
-"$VENV_PIP" install -r "$ROOT/requirements.txt"
+"$VENV_PIP" install -e "$ROOT"
 
 echo "All dependencies installed successfully."
-echo "Use '$VENV_PY script.py' to run without activating."
+echo "Use '$VENV_PY -m voicebound.cli --help' or 'voicebound --help' (after activation) to view commands."
+echo "Tip: install shell completion by running 'SHELL=${SHELL:-/bin/bash} $VENV_PY -m voicebound.cli --install-completion' (or 'voicebound --install-completion' after activation)."
 
-echo "Activating virtual environment..."
+if [ "$NO_ACTIVATE" -eq 1 ]; then
+  echo "Skipping shell activation (--no-activate)."
+  exit 0
+fi
+
+echo "Activating virtual environment for convenience..."
 
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
