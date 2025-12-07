@@ -8,7 +8,10 @@ import typer
 
 from commands import ai_translate, ai_voice
 
-APP_VERSION = importlib.metadata.version("voicebound")
+try:
+    APP_VERSION = importlib.metadata.version("voicebound")
+except importlib.metadata.PackageNotFoundError:
+    APP_VERSION = "0.0.0"
 
 app = typer.Typer(
     help="Voicebound CLI utilities for translating text and generating audio.",
