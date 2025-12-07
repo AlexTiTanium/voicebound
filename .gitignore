@@ -31,3 +31,11 @@ config.toml
 
 # String input default file
 strings.xml
+
+# python-test-cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Ruff cache
+.ruff_cache/

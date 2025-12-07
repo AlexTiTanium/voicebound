@@ -1,6 +1,0 @@
-# Copy this file root folder and fill in your API keys
-[openai]
-api_key = ""
-
-[hume_ai]
-api_key = ""
