@@ -15,14 +15,14 @@ CONFIG_PATH = PROJECT_ROOT / "config.toml"
 
 
 def configure_logging(level: str | None = None) -> None:
-    """Configure loguru to log to stdout once per process."""
+    """Configure loguru to log to stdout once per process (synchronous sink)."""
     log_level = level or os.getenv("VOICEBOUND_LOG_LEVEL", "INFO")
     logger.remove()
     logger.add(
         sys.stdout,
         level=log_level,
         format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message}",
-        enqueue=True,
+        enqueue=False,
     )
 
 
