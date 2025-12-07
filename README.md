@@ -17,13 +17,14 @@ Utilities for translating and generating audio from text assets.
 - Copy the example config and add your API keys (do not commit secrets):
   - `cp config.example.toml config.toml`
   - Set `openai.api_key` for translation and `hume_ai.api_key` for voice in `config.toml`.
+- All default options for the CLI live in `config.toml` under `[translate]` and `[voice]` (paths, regex filters, models, worker counts, rate limits). Override via CLI flags if needed.
 
 ## CLI usage
 - Run `voicebound --help` for the full command list (after `pip install -e .`).
-- Translate strings: `voicebound translate --input-file strings.xml`
+- Translate strings: `voicebound translate --input-file strings.xml --config-path config.toml`
   - Default output: `out/values/strings.xml`
   - Progress cache: `.cache/progress.json`
-- Generate audio: `voicebound voice`
+- Generate audio: `voicebound voice --config-path config.toml`
   - Reads translations from `.cache/progress.json`
   - Writes audio files to `out/hume/`
 

@@ -14,12 +14,13 @@ from loguru import logger
 from openai import OpenAI
 
 from voicebound.utils import (
-    CONFIG_PATH,
     PROJECT_ROOT,
     configure_logging,
+    get_config_value,
     ensure_directory,
-    load_config_value,
+    load_config,
     load_json,
+    resolve_path,
     write_json,
 )
 
@@ -126,19 +127,34 @@ def apply_translations(root, results: Iterable[tuple[str | None, str | None, str
 
 
 def translate_strings(
-    input_file: Path = PROJECT_ROOT / "strings.xml",
-    output_file: Path = PROJECT_ROOT / "out/values/strings.xml",
-    progress_file: Path = PROJECT_ROOT / ".cache/progress.json",
+    input_file: Path | None = None,
+    output_file: Path | None = None,
+    progress_file: Path | None = None,
     *,
-    translate_regex: str = r"^chp10_",
-    ignore_regex: str = r"app_name",
-    dry_run: bool = False,
-    max_workers: int = 20,
-    model: str = "gpt-5-nano",
-    count_tokens_enabled: bool = True,
+    translate_regex: str | None = None,
+    ignore_regex: str | None = None,
+    dry_run: bool | None = None,
+    max_workers: int | None = None,
+    model: str | None = None,
+    count_tokens_enabled: bool | None = None,
+    config_path: Path = PROJECT_ROOT / "config.toml",
 ) -> None:
     configure_logging()
-    api_key = load_config_value("openai", "api_key", CONFIG_PATH)
+    config = load_config(config_path)
+    api_key = get_config_value(config, "openai", "api_key")
+    translate_cfg = config.get("translate", {})
+
+    input_file = resolve_path(input_file or translate_cfg.get("input_file", "strings.xml"))
+    output_file = resolve_path(output_file or translate_cfg.get("output_file", "out/values/strings.xml"))
+    progress_file = resolve_path(progress_file or translate_cfg.get("progress_file", ".cache/progress.json"))
+    translate_regex = translate_regex or translate_cfg.get("translate_regex", r"^chp10_")
+    ignore_regex = ignore_regex or translate_cfg.get("ignore_regex", r"app_name")
+    dry_run = translate_cfg.get("dry_run", False) if dry_run is None else dry_run
+    max_workers = translate_cfg.get("max_workers", 20) if max_workers is None else max_workers
+    model = model or translate_cfg.get("model", "gpt-5-nano")
+    count_tokens_enabled = (
+        translate_cfg.get("count_tokens_enabled", True) if count_tokens_enabled is None else count_tokens_enabled
+    )
 
     if not input_file.exists():
         raise SystemExit(f"Input file not found: {input_file}")
@@ -219,15 +235,16 @@ def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]
 
 
 def typer_command(
-    input_file: Path = typer.Option(PROJECT_ROOT / "strings.xml", help="Path to the input strings.xml."),
-    output_file: Path = typer.Option(PROJECT_ROOT / "out/values/strings.xml", help="Path to write translated XML."),
-    progress_file: Path = typer.Option(PROJECT_ROOT / ".cache/progress.json", help="Path to progress cache JSON."),
-    translate_regex: str = typer.Option(r"^chp10_", help="Translate only entries matching this regex."),
-    ignore_regex: str = typer.Option(r"app_name", help="Ignore entries matching this regex."),
-    dry_run: bool = typer.Option(False, help="Dry run (no translation calls)."),
-    max_workers: int = typer.Option(20, help="Parallel workers."),
-    model: str = typer.Option("gpt-5-nano", help="OpenAI model to use."),
-    count_tokens_enabled: bool = typer.Option(True, help="Count tokens before translation."),
+    input_file: Path | None = typer.Option(None, help="Path to the input strings.xml."),
+    output_file: Path | None = typer.Option(None, help="Path to write translated XML."),
+    progress_file: Path | None = typer.Option(None, help="Path to progress cache JSON."),
+    translate_regex: str | None = typer.Option(None, help="Translate only entries matching this regex."),
+    ignore_regex: str | None = typer.Option(None, help="Ignore entries matching this regex."),
+    dry_run: bool | None = typer.Option(None, help="Dry run (no translation calls)."),
+    max_workers: int | None = typer.Option(None, help="Parallel workers."),
+    model: str | None = typer.Option(None, help="OpenAI model to use."),
+    count_tokens_enabled: bool | None = typer.Option(None, help="Count tokens before translation."),
+    config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
     translate_strings(
         input_file=input_file,
@@ -239,6 +256,7 @@ def typer_command(
         max_workers=max_workers,
         model=model,
         count_tokens_enabled=count_tokens_enabled,
+        config_path=config_path,
     )
 
 

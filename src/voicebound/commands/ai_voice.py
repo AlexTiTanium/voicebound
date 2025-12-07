@@ -11,13 +11,14 @@ import typer
 from loguru import logger
 
 from voicebound.utils import (
-    CONFIG_PATH,
     PROJECT_ROOT,
     RateLimiter,
     configure_logging,
     ensure_directory,
-    load_config_value,
+    get_config_value,
+    load_config,
     load_json,
+    resolve_path,
 )
 
 API_URL = "https://api.hume.ai/v0/tts/file"
@@ -122,31 +123,50 @@ def attempt_send(
 
         if not success and attempt < max_retries:
             sleep_for = backoff_seconds[min(attempt - 1, len(backoff_seconds) - 1)]
-            logger.info(f"[VOICE] {out_path.stem} retry after {sleep_for}s")
+            logger.warning(f"[VOICE] {out_path.stem} retry after {sleep_for}s")
             time.sleep(sleep_for)
 
     return success, error_message
 
 
 def generate_voice(
-    input_file: Path = PROJECT_ROOT / ".cache/progress.json",
-    output_dir: Path = PROJECT_ROOT / "out/hume",
+    input_file: Path | None = None,
+    output_dir: Path | None = None,
     *,
-    voice_name: str = "ivan",
-    voice_provider: str = "HUME_AI",
-    audio_format: str = "mp3",
-    split_utterances: bool = True,
-    name_regex: str = r"^chp",
-    stop_after: int = 0,
-    max_workers: int = 4,
-    request_delay_seconds: float = 5.5,
-    max_retries: int = 3,
-    backoff_seconds: tuple[int, ...] = (1, 2, 4),
-    model: str = "octave",
+    voice_name: str | None = None,
+    voice_provider: str | None = None,
+    audio_format: str | None = None,
+    split_utterances: bool | None = None,
+    name_regex: str | None = None,
+    stop_after: int | None = None,
+    max_workers: int | None = None,
+    request_delay_seconds: float | None = None,
+    max_retries: int | None = None,
+    backoff_seconds: tuple[int, ...] | None = None,
+    model: str | None = None,
+    config_path: Path = PROJECT_ROOT / "config.toml",
 ) -> None:
     """Generate voice files from cached translations."""
     configure_logging()
-    api_key = load_config_value("hume_ai", "api_key", CONFIG_PATH)
+    config = load_config(config_path)
+    api_key = get_config_value(config, "hume_ai", "api_key")
+    voice_cfg = config.get("voice", {})
+
+    input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
+    output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
+    voice_name = voice_name or voice_cfg.get("voice_name", "ivan")
+    voice_provider = voice_provider or voice_cfg.get("voice_provider", "HUME_AI")
+    audio_format = audio_format or voice_cfg.get("audio_format", "mp3")
+    split_utterances = voice_cfg.get("split_utterances", True) if split_utterances is None else split_utterances
+    name_regex = name_regex or voice_cfg.get("name_regex", r"^chp")
+    stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after
+    max_workers = voice_cfg.get("max_workers", 4) if max_workers is None else max_workers
+    request_delay_seconds = (
+        voice_cfg.get("request_delay_seconds", 5.5) if request_delay_seconds is None else request_delay_seconds
+    )
+    max_retries = voice_cfg.get("max_retries", 3) if max_retries is None else max_retries
+    backoff_seconds = tuple(voice_cfg.get("backoff_seconds", [1, 2, 4])) if backoff_seconds is None else backoff_seconds
+    model = model or voice_cfg.get("model", "octave")
 
     if not input_file.exists():
         raise SystemExit(f"Progress file not found: {input_file}. Run translate first.")
@@ -218,18 +238,19 @@ def generate_voice(
 
 
 def typer_command(
-    input_file: Path = typer.Option(PROJECT_ROOT / ".cache/progress.json", help="Path to cached progress JSON."),
-    output_dir: Path = typer.Option(PROJECT_ROOT / "out/hume", help="Directory to write audio files."),
-    voice_name: str = typer.Option("ivan", help="Voice to request from provider."),
-    voice_provider: str = typer.Option("HUME_AI", help="Voice provider identifier."),
-    audio_format: str = typer.Option("mp3", help="Audio format extension and API format type."),
-    split_utterances: bool = typer.Option(True, help="Whether to split utterances in the API."),
-    name_regex: str = typer.Option(r"^chp", help="Only process keys matching this regex."),
-    stop_after: int = typer.Option(0, help="Stop after N items (0 for no limit)."),
-    max_workers: int = typer.Option(4, help="Parallel workers."),
-    request_delay_seconds: float = typer.Option(5.5, help="Delay between requests to honor rate limits."),
-    max_retries: int = typer.Option(3, help="Retry attempts per item."),
-    model: str = typer.Option("octave", help="Hume AI TTS model to use."),
+    input_file: Path | None = typer.Option(None, help="Path to cached progress JSON."),
+    output_dir: Path | None = typer.Option(None, help="Directory to write audio files."),
+    voice_name: str | None = typer.Option(None, help="Voice to request from provider."),
+    voice_provider: str | None = typer.Option(None, help="Voice provider identifier."),
+    audio_format: str | None = typer.Option(None, help="Audio format extension and API format type."),
+    split_utterances: bool | None = typer.Option(None, help="Whether to split utterances in the API."),
+    name_regex: str | None = typer.Option(None, help="Only process keys matching this regex."),
+    stop_after: int | None = typer.Option(None, help="Stop after N items (0 for no limit)."),
+    max_workers: int | None = typer.Option(None, help="Parallel workers."),
+    request_delay_seconds: float | None = typer.Option(None, help="Delay between requests to honor rate limits."),
+    max_retries: int | None = typer.Option(None, help="Retry attempts per item."),
+    model: str | None = typer.Option(None, help="Hume AI TTS model to use."),
+    config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
     """Typer-friendly wrapper."""
     generate_voice(
@@ -244,8 +265,9 @@ def typer_command(
         max_workers=max_workers,
         request_delay_seconds=request_delay_seconds,
         max_retries=max_retries,
-        backoff_seconds=(1, 2, 4),
+        backoff_seconds=None,
         model=model,
+        config_path=config_path,
     )
 
 

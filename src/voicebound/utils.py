@@ -26,15 +26,18 @@ def configure_logging(level: str | None = None) -> None:
     )
 
 
-def load_config_value(section: str, key: str, config_path: Path = CONFIG_PATH) -> str:
-    """Load a single config value, raising a user-friendly error when missing."""
+def load_config(config_path: Path = CONFIG_PATH) -> dict:
+    """Load full config file."""
     if not config_path.exists():
-        raise SystemExit(f"Missing config file: {config_path}. Populate [{section}].{key}.")
+        raise SystemExit(f"Missing config file: {config_path}.")
+    return toml.load(config_path)
 
-    config = toml.load(config_path)
-    value = config.get(section, {}).get(key, "")
-    if not value:
-        raise SystemExit(f"Set {section}.{key} in {config_path}.")
+
+def get_config_value(config: dict, section: str, key: str, *, required: bool = True, default: Any = None) -> Any:
+    """Fetch a value from config with optional default and required enforcement."""
+    value = config.get(section, {}).get(key, default)
+    if required and (value is None or value == ""):
+        raise SystemExit(f"Set [{section}].{key} in config.toml.")
     return value
 
 
@@ -77,3 +80,8 @@ class RateLimiter:
                     now = time.perf_counter()
             self._last = now
 
+
+def resolve_path(path_value: str | Path, base: Path = PROJECT_ROOT) -> Path:
+    """Resolve paths relative to project root when not absolute."""
+    path = Path(path_value)
+    return path if path.is_absolute() else (base / path)

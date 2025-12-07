@@ -1,0 +1,32 @@
+# Copy to config.toml and fill in your API keys and any overrides.
+[openai]
+api_key = ""
+
+[hume_ai]
+api_key = ""
+
+[translate]
+input_file = "strings.xml"
+output_file = "out/values/strings.xml"
+progress_file = ".cache/progress.json"
+translate_regex = "^chp10_"
+ignore_regex = "app_name"
+dry_run = false
+max_workers = 20
+model = "gpt-5-nano"
+count_tokens_enabled = true
+
+[voice]
+input_file = ".cache/progress.json"
+output_dir = "out/hume"
+voice_name = "ivan"
+voice_provider = "HUME_AI"
+audio_format = "mp3"
+split_utterances = true
+name_regex = "^chp"
+stop_after = 0
+max_workers = 4
+request_delay_seconds = 5.5
+max_retries = 3
+backoff_seconds = [1, 2, 4]
+model = "octave"
