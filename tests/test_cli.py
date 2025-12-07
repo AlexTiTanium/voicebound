@@ -4,10 +4,9 @@ from pathlib import Path
 
 import pytest
 import typer
-
-import cli
 from typer.testing import CliRunner
 
+import cli
 from cli import app
 
 runner = CliRunner()

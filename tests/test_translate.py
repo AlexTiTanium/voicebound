@@ -5,7 +5,6 @@ from threading import Lock
 from xml.etree import ElementTree as ET
 
 import pytest
-import typer
 
 from commands import ai_translate
 

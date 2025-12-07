@@ -3,7 +3,6 @@ from pathlib import Path
 
 import pytest
 import requests
-import typer
 
 from commands import ai_voice
 
@@ -399,7 +398,9 @@ def test_ai_voice_main_entry(monkeypatch, tmp_path):
 
 
 def test_attempt_send_max_elapsed(monkeypatch, tmp_path):
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad"))
+    monkeypatch.setattr(
+        ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad")
+    )
     monkeypatch.setattr(ai_voice.time, "sleep", lambda *_: None)
     success, msg = ai_voice.attempt_send(
         payload={},
