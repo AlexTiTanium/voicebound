@@ -29,7 +29,7 @@ def build_payload(
     *,
     model: str,
     voice_name: str,
-    voice_provider: str,
+    provider: str,
     audio_format: str,
     split_utterances: bool,
 ) -> Dict[str, Any]:
@@ -42,7 +42,7 @@ def build_payload(
         "utterances": [
             {
                 "text": text,
-                "voice": {"name": voice_name, "provider": voice_provider},
+                "voice": {"name": voice_name, "provider": provider},
             }
         ],
     }
@@ -64,9 +64,10 @@ def handle_entry(
     backoff_seconds: tuple[int, ...],
     model: str,
     voice_name: str,
-    voice_provider: str,
+    provider: str,
     audio_format: str,
     split_utterances: bool,
+    target_language: str,
 ) -> None:
     """Process a single progress entry end-to-end (thread-safe)."""
     logger.info(f"[VOICE] {key} start")
@@ -74,7 +75,7 @@ def handle_entry(
         text,
         model=model,
         voice_name=voice_name,
-        voice_provider=voice_provider,
+        provider=provider,
         audio_format=audio_format,
         split_utterances=split_utterances,
     )
@@ -134,31 +135,36 @@ def generate_voice(
     output_dir: Path | None = None,
     *,
     voice_name: str | None = None,
-    voice_provider: str | None = None,
+    provider: str | None = None,
     audio_format: str | None = None,
     split_utterances: bool | None = None,
-    name_regex: str | None = None,
+    allowed_regex: str | None = None,
+    ignore_regex: str | None = None,
     stop_after: int | None = None,
     max_workers: int | None = None,
     request_delay_seconds: float | None = None,
     max_retries: int | None = None,
     backoff_seconds: tuple[int, ...] | None = None,
     model: str | None = None,
+    target_language: str | None = None,
     config_path: Path = PROJECT_ROOT / "config.toml",
 ) -> None:
     """Generate voice files from cached translations."""
     configure_logging()
     config = load_config(config_path)
     api_key = get_config_value(config, "hume_ai", "api_key")
+    model = model or get_config_value(config, "hume_ai", "model", required=False, default="octave")
+    provider = provider or get_config_value(config, "hume_ai", "provider", required=False, default="HUME_AI")
+    voice_name = voice_name or get_config_value(config, "hume_ai", "voice_name", required=False, default="ivan")
+    target_language = target_language or config.get("voice", {}).get("target_language", "Russian")
     voice_cfg = config.get("voice", {})
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
     output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
-    voice_name = voice_name or voice_cfg.get("voice_name", "ivan")
-    voice_provider = voice_provider or voice_cfg.get("voice_provider", "HUME_AI")
     audio_format = audio_format or voice_cfg.get("audio_format", "mp3")
     split_utterances = voice_cfg.get("split_utterances", True) if split_utterances is None else split_utterances
-    name_regex = name_regex or voice_cfg.get("name_regex", r"^chp")
+    allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
+    ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
     stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after
     max_workers = voice_cfg.get("max_workers", 4) if max_workers is None else max_workers
     request_delay_seconds = (
@@ -166,7 +172,7 @@ def generate_voice(
     )
     max_retries = voice_cfg.get("max_retries", 3) if max_retries is None else max_retries
     backoff_seconds = tuple(voice_cfg.get("backoff_seconds", [1, 2, 4])) if backoff_seconds is None else backoff_seconds
-    model = model or voice_cfg.get("model", "octave")
+    target_language = target_language or voice_cfg.get("target_language", "Russian")
 
     if not input_file.exists():
         raise SystemExit(f"Progress file not found: {input_file}. Run translate first.")
@@ -182,7 +188,8 @@ def generate_voice(
 
     logger.info(f"[VOICE] Found {len(existing_outputs)} existing outputs; skipping those keys.")
     worklist: list[tuple[str, str]] = []
-    pattern = re.compile(name_regex)
+    allowed_pattern = re.compile(allowed_regex)
+    ignore_pattern = re.compile(ignore_regex) if ignore_regex else None
 
     for key, text in progress.items():
         if stop_after and len(worklist) >= stop_after:
@@ -191,7 +198,10 @@ def generate_voice(
         if key in existing_outputs:
             logger.debug(f"[VOICE] {key} skipped (already generated).")
             continue
-        if not pattern.match(key):
+        if ignore_pattern and ignore_pattern.match(key):
+            logger.debug(f"[VOICE] {key} skipped (ignore regex).")
+            continue
+        if not allowed_pattern.match(key):
             logger.debug(f"[VOICE] {key} skipped (regex).")
             continue
         out_path = output_dir / f"{key}.{audio_format}"
@@ -223,9 +233,10 @@ def generate_voice(
                     backoff_seconds=backoff_seconds,
                     model=model,
                     voice_name=voice_name,
-                    voice_provider=voice_provider,
+                    provider=provider,
                     audio_format=audio_format,
                     split_utterances=split_utterances,
+                    target_language=target_language,
                 )
             )
         for future in futures:
@@ -241,15 +252,17 @@ def typer_command(
     input_file: Path | None = typer.Option(None, help="Path to cached progress JSON."),
     output_dir: Path | None = typer.Option(None, help="Directory to write audio files."),
     voice_name: str | None = typer.Option(None, help="Voice to request from provider."),
-    voice_provider: str | None = typer.Option(None, help="Voice provider identifier."),
+    provider: str | None = typer.Option(None, help="Voice provider identifier."),
     audio_format: str | None = typer.Option(None, help="Audio format extension and API format type."),
     split_utterances: bool | None = typer.Option(None, help="Whether to split utterances in the API."),
-    name_regex: str | None = typer.Option(None, help="Only process keys matching this regex."),
+    allowed_regex: str | None = typer.Option(None, help="Only process keys matching this regex."),
+    ignore_regex: str | None = typer.Option(None, help="Skip keys matching this regex."),
     stop_after: int | None = typer.Option(None, help="Stop after N items (0 for no limit)."),
     max_workers: int | None = typer.Option(None, help="Parallel workers."),
     request_delay_seconds: float | None = typer.Option(None, help="Delay between requests to honor rate limits."),
     max_retries: int | None = typer.Option(None, help="Retry attempts per item."),
     model: str | None = typer.Option(None, help="Hume AI TTS model to use."),
+    target_language: str | None = typer.Option(None, help="Target language for voice content (metadata only)."),
     config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
     """Typer-friendly wrapper."""
@@ -257,16 +270,18 @@ def typer_command(
         input_file=input_file,
         output_dir=output_dir,
         voice_name=voice_name,
-        voice_provider=voice_provider,
+        provider=provider,
         audio_format=audio_format,
         split_utterances=split_utterances,
-        name_regex=name_regex,
+        allowed_regex=allowed_regex,
+        ignore_regex=ignore_regex,
         stop_after=stop_after,
         max_workers=max_workers,
         request_delay_seconds=request_delay_seconds,
         max_retries=max_retries,
         backoff_seconds=None,
         model=model,
+        target_language=target_language,
         config_path=config_path,
     )
 
