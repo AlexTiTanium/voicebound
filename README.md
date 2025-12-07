@@ -17,16 +17,18 @@ Utilities for translating and generating audio from text assets.
   - `cp config.example.toml config.toml`
   - Set `openai.api_key` for translation and `hume_ai.api_key` for voice in `config.toml`.
 
-## ai_translate.py (translate strings)
-- Run: `python ai_translate.py [path/to/strings.xml]`
-  - Defaults to `strings.xml` in this folder.
-  - Output: `out/values/strings.xml`
+## CLI usage
+- Run `python voicebound_cli.py --help` for the full command list.
+- Translate strings: `python voicebound_cli.py translate --input-file strings.xml`
+  - Default output: `out/values/strings.xml`
   - Progress cache: `.cache/progress.json`
-
-## ai_voice.py (generate audio)
-- Run: `python ai_voice.py`
-  - Reads `.cache/progress.json`
+- Generate audio: `python voicebound_cli.py voice`
+  - Reads translations from `.cache/progress.json`
   - Writes audio files to `out/hume/`
+
+## Project layout
+- Command implementations live in `src/commands/`.
+- Shared helpers and logging live in `src/voicebound/`.
 
 ## License
 - MIT (see `LICENSE`)
