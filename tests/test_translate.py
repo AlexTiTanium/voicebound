@@ -107,7 +107,9 @@ def test_translate_dry_run_does_not_write(monkeypatch, tmp_path):
     write_strings(tmp_path)
 
     # Force dry run via config override
-    config_text = config_path.read_text(encoding="utf-8").replace("dry_run = false", "dry_run = true")
+    config_text = (
+        config_path.read_text(encoding="utf-8").replace("dry_run = false", "dry_run = true")
+    )
     config_path.write_text(config_text, encoding="utf-8")
 
     monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))

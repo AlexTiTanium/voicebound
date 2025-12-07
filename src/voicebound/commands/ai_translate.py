@@ -16,8 +16,8 @@ from openai import OpenAI
 from voicebound.utils import (
     PROJECT_ROOT,
     configure_logging,
-    get_config_value,
     ensure_directory,
+    get_config_value,
     load_config,
     load_json,
     resolve_path,
@@ -144,21 +144,31 @@ def translate_strings(
     configure_logging()
     config = load_config(config_path)
     api_key = get_config_value(config, "openai", "api_key")
-    model = model or get_config_value(config, "openai", "model", required=False, default="gpt-5-nano")
+    model = model or get_config_value(
+        config, "openai", "model", required=False, default="gpt-5-nano"
+    )
     translate_cfg = config.get("translate", {})
     provider = get_config_value(config, "translate", "provider", required=False, default="openai")
     if str(provider).lower() != "openai":
-        logger.warning(f"[TRANSLATE] Provider '{provider}' is not recognized; defaulting to OpenAI client.")
+        logger.warning(
+            f"[TRANSLATE] Provider '{provider}' is not recognized; defaulting to OpenAI client."
+        )
 
     input_file = resolve_path(input_file or translate_cfg.get("input_file", "strings.xml"))
-    output_file = resolve_path(output_file or translate_cfg.get("output_file", "out/values/strings.xml"))
-    progress_file = resolve_path(progress_file or translate_cfg.get("progress_file", ".cache/progress.json"))
+    output_file = resolve_path(
+        output_file or translate_cfg.get("output_file", "out/values/strings.xml")
+    )
+    progress_file = resolve_path(
+        progress_file or translate_cfg.get("progress_file", ".cache/progress.json")
+    )
     allowed_regex = allowed_regex or translate_cfg.get("allowed_regex", r"^chp10_")
     ignore_regex = ignore_regex or translate_cfg.get("ignore_regex", r"app_name")
     dry_run = translate_cfg.get("dry_run", False) if dry_run is None else dry_run
     max_workers = translate_cfg.get("max_workers", 20) if max_workers is None else max_workers
     count_tokens_enabled = (
-        translate_cfg.get("count_tokens_enabled", True) if count_tokens_enabled is None else count_tokens_enabled
+        translate_cfg.get("count_tokens_enabled", True)
+        if count_tokens_enabled is None
+        else count_tokens_enabled
     )
     target_language = target_language or translate_cfg.get("target_language", "Russian")
 
@@ -251,7 +261,9 @@ def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]
 def typer_command(
     input_file: Path | None = typer.Option(None, help="Path to the input strings.xml."),
     output_file: Path | None = typer.Option(None, help="Path to write translated XML."),
-    allowed_regex: str | None = typer.Option(None, help="Translate only entries matching this regex."),
+    allowed_regex: str | None = typer.Option(
+        None, help="Translate only entries matching this regex."
+    ),
     ignore_regex: str | None = typer.Option(None, help="Ignore entries matching this regex."),
     dry_run: bool | None = typer.Option(None, help="Dry run (no translation calls)."),
     max_workers: int | None = typer.Option(None, help="Parallel workers."),

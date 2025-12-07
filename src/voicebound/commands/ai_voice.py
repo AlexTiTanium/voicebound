@@ -4,12 +4,12 @@ import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from threading import Event
 from typing import Any, Dict
 
 import requests
 import typer
 from loguru import logger
-from threading import Event
 
 from voicebound.utils import (
     PROJECT_ROOT,
@@ -191,7 +191,9 @@ def generate_voice(
         "X-Hume-Api-Key": api_key,
     }
     rate_limiter = RateLimiter(request_delay_seconds)
-    existing_outputs = {path.stem for path in output_dir.glob("*.mp3")} if output_dir.exists() else set()
+    existing_outputs = (
+        {path.stem for path in output_dir.glob("*.mp3")} if output_dir.exists() else set()
+    )
 
     logger.info(f"[VOICE] Found {len(existing_outputs)} existing outputs; skipping those keys.")
     worklist: list[tuple[str, str]] = []
@@ -279,11 +281,15 @@ def typer_command(
     input_file: Path | None = typer.Option(None, help="Path to cached progress JSON."),
     output_dir: Path | None = typer.Option(None, help="Directory to write audio files."),
     provider: str | None = typer.Option(None, help="Voice provider identifier."),
-    target_language: str | None = typer.Option(None, help="Target language for voice content (metadata only)."),
+    target_language: str | None = typer.Option(
+        None, help="Target language for voice content (metadata only)."
+    ),
     allowed_regex: str | None = typer.Option(None, help="Only process keys matching this regex."),
     ignore_regex: str | None = typer.Option(None, help="Skip keys matching this regex."),
     stop_after: int | None = typer.Option(None, help="Stop after N items (0 for no limit)."),
-    audio_format: str | None = typer.Option(None, help="Audio format extension and API format type."),
+    audio_format: str | None = typer.Option(
+        None, help="Audio format extension and API format type."
+    ),
     config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
     """Typer-friendly wrapper."""

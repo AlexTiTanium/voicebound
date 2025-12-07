@@ -36,5 +36,8 @@ Utilities for translating and generating audio from text assets.
 - Install deps (or re-run installer): `./venv/bin/pip install -r requirements.txt`
 - Run: `./venv/bin/pytest` (or activate the venv first, then `pytest`).
 
+## Lint
+- Run Ruff: `./venv/bin/ruff check .` (install deps first).
+
 ## License
 - MIT (see `LICENSE`)

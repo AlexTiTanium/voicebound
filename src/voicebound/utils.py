@@ -33,7 +33,9 @@ def load_config(config_path: Path = CONFIG_PATH) -> dict:
     return toml.load(config_path)
 
 
-def get_config_value(config: dict, section: str, key: str, *, required: bool = True, default: Any = None) -> Any:
+def get_config_value(
+    config: dict, section: str, key: str, *, required: bool = True, default: Any = None
+) -> Any:
     """Fetch a value from config with optional default and required enforcement."""
     value = config.get(section, {}).get(key, default)
     if required and (value is None or value == ""):

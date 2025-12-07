@@ -139,7 +139,8 @@ def test_voice_respects_existing_outputs(monkeypatch, tmp_path):
     # keep_one should remain untouched, keep_two generated
     assert (out_dir / "keep_one.mp3").read_bytes() == b"existing"
     assert (out_dir / "skip_me.mp3").exists() is False
-    assert (out_dir / "keep_two.mp3").exists() is False  # skip_me and other filtered; only keep_one existed
+    # skip_me and other filtered; only keep_one existed
+    assert (out_dir / "keep_two.mp3").exists() is False
 
 
 def test_attempt_send_stops_on_event(monkeypatch, tmp_path):
