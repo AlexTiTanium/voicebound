@@ -145,10 +145,10 @@ def translate_strings(
     config = load_config(config_path)
     api_key = get_config_value(config, "openai", "api_key")
     model = model or get_config_value(config, "openai", "model", required=False, default="gpt-5-nano")
-    provider = get_config_value(config, "openai", "provider", required=False, default="openai")
-    if provider.lower() != "openai":
-        logger.warning(f"[TRANSLATE] Provider '{provider}' is not recognized; defaulting to OpenAI client.")
     translate_cfg = config.get("translate", {})
+    provider = get_config_value(config, "translate", "provider", required=False, default="openai")
+    if str(provider).lower() != "openai":
+        logger.warning(f"[TRANSLATE] Provider '{provider}' is not recognized; defaulting to OpenAI client.")
 
     input_file = resolve_path(input_file or translate_cfg.get("input_file", "strings.xml"))
     output_file = resolve_path(output_file or translate_cfg.get("output_file", "out/values/strings.xml"))

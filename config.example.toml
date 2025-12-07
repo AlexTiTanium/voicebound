@@ -1,30 +1,30 @@
 [openai]
 api_key = ""
 model = "gpt-5-nano"
-provider = "openai"
 
 [hume_ai]
 api_key = ""
 model = "octave"
-provider = "HUME_AI"
 voice_name = "ivan"
+octave_version = "2"
+split_utterances = true
 
 [translate]
 input_file = "strings.xml"
 output_file = "out/values/strings.xml"
 progress_file = ".cache/progress.json"
 allowed_regex = "^chp10_"
-ignore_regex = "app_name"
+ignore_regex = ""
 dry_run = false
 max_workers = 20
 count_tokens_enabled = true
 target_language = "Russian"
+provider = "openai"
 
 [voice]
 input_file = ".cache/progress.json"
 output_dir = "out/hume"
 audio_format = "mp3"
-split_utterances = true
 allowed_regex = "^chp"
 ignore_regex = ""
 stop_after = 0
@@ -33,3 +33,4 @@ request_delay_seconds = 5.5
 max_retries = 3
 backoff_seconds = [1, 2, 4]
 target_language = "Russian"
+provider = "HUME_AI"
