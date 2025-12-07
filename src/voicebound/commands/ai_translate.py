@@ -244,26 +244,22 @@ def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]
 def typer_command(
     input_file: Path | None = typer.Option(None, help="Path to the input strings.xml."),
     output_file: Path | None = typer.Option(None, help="Path to write translated XML."),
-    progress_file: Path | None = typer.Option(None, help="Path to progress cache JSON."),
     allowed_regex: str | None = typer.Option(None, help="Translate only entries matching this regex."),
     ignore_regex: str | None = typer.Option(None, help="Ignore entries matching this regex."),
     dry_run: bool | None = typer.Option(None, help="Dry run (no translation calls)."),
     max_workers: int | None = typer.Option(None, help="Parallel workers."),
     model: str | None = typer.Option(None, help="OpenAI model to use."),
-    count_tokens_enabled: bool | None = typer.Option(None, help="Count tokens before translation."),
     target_language: str | None = typer.Option(None, help="Target language to translate into."),
     config_path: Path = typer.Option(PROJECT_ROOT / "config.toml", help="Path to config.toml."),
 ) -> None:
     translate_strings(
         input_file=input_file,
         output_file=output_file,
-        progress_file=progress_file,
         allowed_regex=allowed_regex,
         ignore_regex=ignore_regex,
         dry_run=dry_run,
         max_workers=max_workers,
         model=model,
-        count_tokens_enabled=count_tokens_enabled,
         target_language=target_language,
         config_path=config_path,
     )
