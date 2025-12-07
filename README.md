@@ -32,5 +32,9 @@ Utilities for translating and generating audio from text assets.
 - Command implementations live in `src/voicebound/commands/`.
 - Shared helpers and logging live in `src/voicebound/`.
 
+## Tests
+- Install deps (or re-run installer): `./venv/bin/pip install -r requirements.txt`
+- Run: `./venv/bin/pytest` (or activate the venv first, then `pytest`).
+
 ## License
 - MIT (see `LICENSE`)
