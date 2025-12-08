@@ -18,6 +18,7 @@ from command_utils import (
     build_runner,
     load_provider_settings,
 )
+from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
     PROJECT_ROOT,
@@ -83,7 +84,7 @@ def process_string(
     ignore_pattern: re.Pattern[str],
     done: dict,
     progress_lock: Lock,
-    client: Any,
+    client: OpenAI,
     progress_file: Path,
     model: str,
     dry_run: bool,
@@ -242,6 +243,7 @@ def translate_strings(
                 target_language,
                 provider_settings,
                 reporter,
+                SummaryReporter("translate"),
             )
     except KeyboardInterrupt:
         logger.warning("[TRANSLATE] Interrupted by user.")
@@ -253,15 +255,6 @@ def translate_strings(
 
     apply_translations(root, results)
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
-    summary = _summarize_results(results)
-    logger.success(
-        f"[TRANSLATE] Done. translated={summary['translated']} skipped={summary['skipped']} "
-        f"loaded={summary['loaded']} ignored={summary['ignored']} empty={summary['empty']} "
-        f"errors={len(summary['errors'])}"
-    )
-    if summary["errors"]:
-        logger.error(f"[TRANSLATE] Failed entries: {', '.join(summary['errors'])}")
-    logger.success(f"[TRANSLATE] Output saved to: {output_file}")
 
 
 async def _run_translate_async(
@@ -278,6 +271,7 @@ async def _run_translate_async(
     target_language: str,
     provider_settings: ProviderSettings,
     reporter: ProgressReporter,
+    summary: SummaryReporter,
 ) -> list[tuple[str | None, str | None, str | tuple]]:
     """Drive TaskRunner for translation tasks."""
     results: list[tuple[str | None, str | None, str | tuple]] = []
@@ -285,10 +279,16 @@ async def _run_translate_async(
     async def on_success(_spec: TaskSpec, result: tuple[str | None, str | None, str | tuple]):
         results.append(result)
         reporter.advance()
+        status = result[2]
+        if isinstance(status, tuple):
+            summary.record_translation(status[0], result[0])
+        else:
+            summary.record_translation(status, result[0])
 
     async def on_failure(spec: TaskSpec, exc: BaseException):
         results.append((spec.task_id, None, ("error", str(exc))))
         reporter.advance()
+        summary.record_translation("error", spec.task_id)
 
     def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
         sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
@@ -332,6 +332,7 @@ async def _run_translate_async(
 
     await runner.run(specs)
 
+    summary.log_translation(str(progress_file))
     return results
 
 

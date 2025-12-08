@@ -1,18 +1,14 @@
 import time
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, TypedDict
 
 import anyio
 import httpx
 import typer
 from loguru import logger
 
-from command_utils import (
-    ProgressReporter,
-    ProviderSettings,
-    build_runner,
-    load_provider_settings,
-)
+from command_utils import ProgressReporter, ProviderSettings, build_runner, load_provider_settings
+from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
     compile_regex,
@@ -25,6 +21,12 @@ from utils import (
 )
 
 API_URL = "https://api.hume.ai/v0/tts/file"
+
+
+class VoiceSummary(TypedDict):
+    successes: list[str]
+    failures: list[str]
+    skipped: int
 
 
 def build_payload(
@@ -180,10 +182,10 @@ def generate_voice(
     if not worklist:
         logger.info("[VOICE] Nothing to process.")
         return
-
+    summary: VoiceSummary = {"successes": [], "failures": [], "skipped": len(existing_outputs)}
     try:
         with ProgressReporter("[VOICE] Processing", total=len(worklist)) as reporter:
-            results = anyio.run(
+            anyio.run(
                 _run_voice_async,
                 worklist,
                 headers,
@@ -197,20 +199,16 @@ def generate_voice(
                 max_elapsed_seconds,
                 provider_settings,
                 reporter,
+                summary,
             )
     except KeyboardInterrupt:
         logger.warning("[VOICE] Interrupted by user.")
         raise SystemExit(130)
 
-    successes = [name for name, status in results if status == "ok"]
-    failures = [name for name, status in results if status == "error"]
-
-    logger.info(
-        f"[VOICE] Run complete. generated={len(successes)} failures={len(failures)} "
-        f"skipped={len(existing_outputs)}"
-    )
-    if failures:
-        logger.error(f"[VOICE] Failed entries: {', '.join(failures)}")
+    successes = summary["successes"]
+    failures = summary["failures"]
+    voice_summary = SummaryReporter("voice")
+    voice_summary.log_voice(successes, failures, summary["skipped"])
 
 
 async def _run_voice_async(
@@ -226,6 +224,7 @@ async def _run_voice_async(
     max_elapsed_seconds: float | None,
     provider_settings: ProviderSettings,
     reporter: ProgressReporter,
+    summary,
 ) -> list[tuple[str, str]]:
     """Execute Hume synthesis tasks via TaskRunner."""
     results: list[tuple[str, str]] = []
@@ -233,11 +232,13 @@ async def _run_voice_async(
     async def on_success(spec: TaskSpec, _result: Path) -> None:
         results.append((spec.task_id, "ok"))
         reporter.advance()
+        summary["successes"].append(spec.task_id)
 
     async def on_failure(spec: TaskSpec, exc: BaseException) -> None:
         logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
         results.append((spec.task_id, "error"))
         reporter.advance()
+        summary["failures"].append(spec.task_id)
 
     def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
         sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"

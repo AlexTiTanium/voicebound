@@ -3,6 +3,7 @@ import os
 import re
 import sys
 import time
+import warnings
 from pathlib import Path
 from threading import Lock
 from typing import Any
@@ -26,6 +27,11 @@ REQUIRED_CONFIG = {
 def configure_logging(level: str | None = None, *, color: bool = True) -> None:
     """Configure loguru to log to stderr once per process (keeps stdout clean for progress)."""
     log_level_str: str = (level or os.getenv("VOICEBOUND_LOG_LEVEL") or "INFO")
+    warnings.filterwarnings(
+        "ignore",
+        category=DeprecationWarning,
+        module=r"loguru\._simple_sinks",
+    )
     fmt = (
         "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message}"
         if color
