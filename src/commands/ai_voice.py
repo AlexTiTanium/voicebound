@@ -7,7 +7,8 @@ import httpx
 import typer
 from loguru import logger
 
-from command_utils import ProgressReporter, ProviderSettings, build_runner, load_provider_settings
+from command_context import run_with_progress
+from command_utils import ProviderSettings, build_runner, load_provider_settings
 from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
@@ -184,31 +185,30 @@ def generate_voice(
         return
     summary: VoiceSummary = {"successes": [], "failures": [], "skipped": len(existing_outputs)}
     try:
-        with ProgressReporter("[VOICE] Processing", total=len(worklist)) as reporter:
-            anyio.run(
-                _run_voice_async,
-                worklist,
-                headers,
-                output_dir,
-                audio_format,
-                model,
-                voice_name,
-                provider,
-                split_utterances,
-                octave_version,
-                max_elapsed_seconds,
-                provider_settings,
-                reporter,
-                summary,
-            )
+        voice_summary = SummaryReporter("voice")
+        anyio.run(
+            _run_voice_async,
+            worklist,
+            headers,
+            output_dir,
+            audio_format,
+            model,
+            voice_name,
+            provider,
+            split_utterances,
+            octave_version,
+            max_elapsed_seconds,
+            provider_settings,
+            voice_summary,
+            summary["skipped"],
+        )
     except KeyboardInterrupt:
         logger.warning("[VOICE] Interrupted by user.")
         raise SystemExit(130)
 
-    successes = summary["successes"]
-    failures = summary["failures"]
-    voice_summary = SummaryReporter("voice")
-    voice_summary.log_voice(successes, failures, summary["skipped"])
+    voice_summary.log_voice(
+        voice_summary.successes_list, voice_summary.failures, summary["skipped"]
+    )
 
 
 async def _run_voice_async(
@@ -223,35 +223,13 @@ async def _run_voice_async(
     octave_version: str,
     max_elapsed_seconds: float | None,
     provider_settings: ProviderSettings,
-    reporter: ProgressReporter,
-    summary,
+    summary: SummaryReporter,
+    skipped_count: int,
 ) -> list[tuple[str, str]]:
     """Execute Hume synthesis tasks via TaskRunner."""
     results: list[tuple[str, str]] = []
 
-    async def on_success(spec: TaskSpec, _result: Path) -> None:
-        results.append((spec.task_id, "ok"))
-        reporter.advance()
-        summary["successes"].append(spec.task_id)
-
-    async def on_failure(spec: TaskSpec, exc: BaseException) -> None:
-        logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
-        results.append((spec.task_id, "error"))
-        reporter.advance()
-        summary["failures"].append(spec.task_id)
-
-    def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
-        sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
-        logger.warning(
-            f"[VOICE] {spec.task_id} retry {attempt}/{provider_settings.retry.attempts} "
-            f"(sleep {sleep_desc})"
-        )
-
-    runner = build_runner(
-        "voice",
-        provider_settings,
-        TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry),
-    )
+    runner = build_runner("voice", provider_settings, TaskHooks())
     specs: list[TaskSpec] = []
     async with httpx.AsyncClient() as client:
         for key, text in worklist:
@@ -282,8 +260,34 @@ async def _run_voice_async(
                 )
             )
 
-        await runner.run(specs)
+        def success_cb(spec: TaskSpec, _result: Path) -> None:
+            results.append((spec.task_id, "ok"))
+            summary.record_success(spec.task_id)
 
+        def failure_cb(spec: TaskSpec, exc: BaseException) -> None:
+            logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
+            results.append((spec.task_id, "error"))
+            summary.record_failure(spec.task_id, exc)
+
+        def retry_cb(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
+            sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
+            logger.warning(
+                f"[VOICE] {spec.task_id} retry {attempt}/{provider_settings.retry.attempts} "
+                f"(sleep {sleep_desc})"
+            )
+
+        await run_with_progress(
+            "voice",
+            len(specs),
+            runner,
+            specs,
+            summary,
+            success_cb=success_cb,
+            failure_cb=failure_cb,
+            retry_cb=retry_cb,
+        )
+
+    summary.skipped = skipped_count
     return results
 
 

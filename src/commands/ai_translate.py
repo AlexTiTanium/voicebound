@@ -3,7 +3,7 @@ import re
 from html import unescape
 from pathlib import Path
 from threading import Lock
-from typing import Any, Iterable, Optional, Tuple, TypedDict
+from typing import Any, Callable, Iterable, Optional, Tuple, TypedDict
 from xml.etree import ElementTree as ET
 
 import anyio
@@ -12,21 +12,15 @@ import typer
 from loguru import logger
 from openai import OpenAI
 
-from command_utils import (
-    ProgressReporter,
-    ProviderSettings,
-    build_runner,
-    load_provider_settings,
-)
+from command_context import CommandContext, build_tasks, make_command_context, run_with_progress
+from command_utils import ProviderSettings, build_runner
 from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
     PROJECT_ROOT,
     compile_regex,
-    configure_logging,
     ensure_directory,
     get_config_value,
-    load_config,
     load_json,
     resolve_path,
     write_json,
@@ -167,19 +161,21 @@ def translate_strings(
     color: bool = True,
 ) -> None:
     """Translate strings.xml using OpenAI according to config and CLI overrides."""
-    configure_logging(level=log_level, color=color)
-    config = load_config(config_path)
-    provider_settings = load_provider_settings(
-        config,
+    ctx: CommandContext = make_command_context(
+        config_path=config_path,
         provider_key="openai",
         default_model="gpt-5-nano",
         default_rpm=60,
         concurrency_override=max_workers,
+        log_level=log_level,
+        color=color,
     )
-    api_key = provider_settings.api_key
-    model = model or provider_settings.model
-    translate_cfg = config.get("translate", {})
-    provider = get_config_value(config, "translate", "provider", required=False, default="openai")
+    api_key = ctx.provider.api_key
+    model = model or ctx.provider.model
+    translate_cfg = ctx.config.get("translate", {})
+    provider = get_config_value(
+        ctx.config, "translate", "provider", required=False, default="openai"
+    )
     if str(provider).lower() != "openai":
         logger.warning(
             f"[TRANSLATE] Provider '{provider}' is not recognized; defaulting to OpenAI client."
@@ -227,24 +223,23 @@ def translate_strings(
     encoding = tiktoken.get_encoding("o200k_base") if count_tokens_enabled else None
     client = OpenAI(api_key=api_key)
     try:
-        with ProgressReporter("[TRANSLATE] Processing", total=len(tasks)) as reporter:
-            results = anyio.run(
-                _run_translate_async,
-                tasks,
-                translate_pattern,
-                ignore_pattern,
-                done,
-                progress_lock,
-                client,
-                progress_file,
-                model,
-                dry_run,
-                encoding,
-                target_language,
-                provider_settings,
-                reporter,
-                SummaryReporter("translate"),
-            )
+        summary = SummaryReporter("translate")
+        results = anyio.run(
+            _run_translate_async,
+            tasks,
+            translate_pattern,
+            ignore_pattern,
+            done,
+            progress_lock,
+            client,
+            progress_file,
+            model,
+            dry_run,
+            encoding,
+            target_language,
+            ctx.provider,
+            summary,
+        )
     except KeyboardInterrupt:
         logger.warning("[TRANSLATE] Interrupted by user.")
         raise SystemExit(130)
@@ -267,42 +262,19 @@ async def _run_translate_async(
     progress_file: Path,
     model: str,
     dry_run: bool,
-    encoding,
+    encoding: Any,
     target_language: str,
     provider_settings: ProviderSettings,
-    reporter: ProgressReporter,
     summary: SummaryReporter,
 ) -> list[tuple[str | None, str | None, str | tuple]]:
     """Drive TaskRunner for translation tasks."""
     results: list[tuple[str | None, str | None, str | tuple]] = []
-
-    async def on_success(_spec: TaskSpec, result: tuple[str | None, str | None, str | tuple]):
-        results.append(result)
-        reporter.advance()
-        status = result[2]
-        if isinstance(status, tuple):
-            summary.record_translation(status[0], result[0])
-        else:
-            summary.record_translation(status, result[0])
-
-    async def on_failure(spec: TaskSpec, exc: BaseException):
-        results.append((spec.task_id, None, ("error", str(exc))))
-        reporter.advance()
-        summary.record_translation("error", spec.task_id)
-
-    def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
-        sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
-        logger.warning(
-            f"[TRANSLATE] {spec.task_id} retry {attempt}/{provider_settings.retry.attempts} "
-            f"(sleep {sleep_desc})"
-        )
-
     runner = build_runner(
         "translate",
         provider_settings,
-        TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry),
+        TaskHooks(),
     )
-    specs: list[TaskSpec] = []
+    work_items: list[tuple[str, Callable[..., Any]]] = []
     for idx, node in enumerate(tasks):
         task_name = node.get("name") or f"string-{idx}"
         task_fn = functools.partial(
@@ -323,15 +295,30 @@ async def _run_translate_async(
         async def coro(fn=task_fn):
             return await anyio.to_thread.run_sync(fn)
 
-        specs.append(
-            TaskSpec(
-                task_id=task_name,
-                coro_factory=coro,
-            )
-        )
+        work_items.append((task_name, coro))
 
-    await runner.run(specs)
+    specs = build_tasks(work_items)
+    def success_cb(spec: TaskSpec, result):
+        results.append(result)
+        status = result[2]
+        if isinstance(status, tuple):
+            summary.record_translation(status[0], result[0])
+        else:
+            summary.record_translation(status, result[0])
 
+    def failure_cb(spec: TaskSpec, exc: BaseException):
+        results.append((spec.task_id, None, ("error", str(exc))))
+        summary.record_translation("error", spec.task_id)
+
+    await run_with_progress(
+        "translate",
+        len(specs),
+        runner,
+        specs,
+        summary,
+        success_cb=success_cb,
+        failure_cb=failure_cb,
+    )
     summary.log_translation(str(progress_file))
     return results
 

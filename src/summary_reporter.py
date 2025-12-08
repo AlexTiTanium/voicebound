@@ -10,6 +10,7 @@ from loguru import logger
 class SummaryReporter:
     name: str
     successes: int = 0
+    successes_list: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
     skipped: int = 0
     loaded: int = 0
@@ -28,6 +29,15 @@ class SummaryReporter:
         elif status == "empty":
             self.empty += 1
         elif status == "error" and task_id:
+            self.failures.append(task_id)
+
+    def record_success(self, task_id: str | None) -> None:
+        self.successes += 1
+        if task_id:
+            self.successes_list.append(task_id)
+
+    def record_failure(self, task_id: str | None, _exc: BaseException | None = None) -> None:
+        if task_id:
             self.failures.append(task_id)
 
     def log_translation(self, output_path: str | None = None) -> None:
