@@ -300,16 +300,20 @@ async def _run_voice_async(
                 split_utterances=split_utterances,
                 octave_version=octave_version,
             )
+
+            async def coro(payload=payload, out_path=out_path):
+                return await synthesize_once(
+                    client=client,
+                    headers=headers,
+                    payload=payload,
+                    out_path=out_path,
+                    max_elapsed_seconds=max_elapsed_seconds,
+                )
+
             specs.append(
                 TaskSpec(
                     task_id=key,
-                    coro_factory=lambda payload=payload, out_path=out_path: synthesize_once(
-                        client=client,
-                        headers=headers,
-                        payload=payload,
-                        out_path=out_path,
-                        max_elapsed_seconds=max_elapsed_seconds,
-                    ),
+                    coro_factory=coro,
                 )
             )
 

@@ -352,10 +352,14 @@ async def _run_translate_async(
             encoding=encoding,
             target_language=target_language,
         )
+
+        async def coro(fn=task_fn):
+            return await anyio.to_thread.run_sync(fn)
+
         specs.append(
             TaskSpec(
                 task_id=task_name,
-                coro_factory=lambda fn=task_fn: anyio.to_thread.run_sync(fn),
+                coro_factory=coro,
             )
         )
 
