@@ -1,6 +1,4 @@
 import functools
-import math
-import os
 import re
 from html import unescape
 from pathlib import Path
@@ -13,16 +11,14 @@ import tiktoken
 import typer
 from loguru import logger
 from openai import OpenAI
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
-from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
+from command_utils import (
+    ProgressReporter,
+    ProviderSettings,
+    build_runner,
+    load_provider_settings,
+)
+from task_runner import TaskHooks, TaskSpec
 from utils import (
     PROJECT_ROOT,
     compile_regex,
@@ -78,26 +74,6 @@ Do not add anything, do not modify structure, only translate the meaning:
 def count_tokens(encoding, text: str) -> int:
     """Return the token count for the given text using the provided encoding."""
     return len(encoding.encode(text))
-
-
-def derive_concurrency(rpm: int, override: int | None = None) -> int:
-    """Compute a reasonable concurrency to approach the rpm target."""
-    if override:
-        return max(1, int(override))
-    cpus = os.cpu_count() or 4
-    # Aim for batches that meet rpm without overshooting CPUs.
-    est = max(1, math.ceil(rpm / 30))
-    return max(1, min(cpus, est))
-
-
-def load_retry_defaults(config: dict) -> RetryConfig:
-    retry_cfg = config.get("retry", {})
-    return RetryConfig(
-        attempts=int(retry_cfg.get("attempts", 3)),
-        backoff_base=float(retry_cfg.get("backoff_base", 0.5)),
-        backoff_max=float(retry_cfg.get("backoff_max", 8.0)),
-        jitter=bool(retry_cfg.get("jitter", True)),
-    )
 
 
 def process_string(
@@ -192,11 +168,15 @@ def translate_strings(
     """Translate strings.xml using OpenAI according to config and CLI overrides."""
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
-    api_key = get_config_value(config, "openai", "api_key")
-    model = model or get_config_value(
-        config, "openai", "model", required=False, default="gpt-5-nano"
+    provider_settings = load_provider_settings(
+        config,
+        provider_key="openai",
+        default_model="gpt-5-nano",
+        default_rpm=60,
+        concurrency_override=max_workers,
     )
-    rpm = int(get_config_value(config, "openai", "rpm", required=False, default=60))
+    api_key = provider_settings.api_key
+    model = model or provider_settings.model
     translate_cfg = config.get("translate", {})
     provider = get_config_value(config, "translate", "provider", required=False, default="openai")
     if str(provider).lower() != "openai":
@@ -245,32 +225,24 @@ def translate_strings(
 
     encoding = tiktoken.get_encoding("o200k_base") if count_tokens_enabled else None
     client = OpenAI(api_key=api_key)
-    retry_cfg = load_retry_defaults(config)
-    concurrency = derive_concurrency(
-        rpm, max_workers or config.get("openai", {}).get("concurrency")
-    )
-    runner_cfg = RunnerConfig(
-        name="translate",
-        rpm=rpm,
-        concurrency=concurrency,
-        retry=retry_cfg,
-    )
     try:
-        results = anyio.run(
-            _run_translate_async,
-            tasks,
-            translate_pattern,
-            ignore_pattern,
-            done,
-            progress_lock,
-            client,
-            progress_file,
-            model,
-            dry_run,
-            encoding,
-            target_language,
-            runner_cfg,
-        )
+        with ProgressReporter("[TRANSLATE] Processing", total=len(tasks)) as reporter:
+            results = anyio.run(
+                _run_translate_async,
+                tasks,
+                translate_pattern,
+                ignore_pattern,
+                done,
+                progress_lock,
+                client,
+                progress_file,
+                model,
+                dry_run,
+                encoding,
+                target_language,
+                provider_settings,
+                reporter,
+            )
     except KeyboardInterrupt:
         logger.warning("[TRANSLATE] Interrupted by user.")
         raise SystemExit(130)
@@ -304,36 +276,31 @@ async def _run_translate_async(
     dry_run: bool,
     encoding,
     target_language: str,
-    runner_cfg: RunnerConfig,
+    provider_settings: ProviderSettings,
+    reporter: ProgressReporter,
 ) -> list[tuple[str | None, str | None, str | tuple]]:
     """Drive TaskRunner for translation tasks."""
     results: list[tuple[str | None, str | None, str | tuple]] = []
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        transient=True,
-    )
 
     async def on_success(_spec: TaskSpec, result: tuple[str | None, str | None, str | tuple]):
         results.append(result)
-        progress.update(task_id, advance=1)
+        reporter.advance()
 
     async def on_failure(spec: TaskSpec, exc: BaseException):
         results.append((spec.task_id, None, ("error", str(exc))))
-        progress.update(task_id, advance=1)
+        reporter.advance()
 
     def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
         sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
         logger.warning(
-            f"[TRANSLATE] {spec.task_id} retry {attempt}/{runner_cfg.retry.attempts} "
+            f"[TRANSLATE] {spec.task_id} retry {attempt}/{provider_settings.retry.attempts} "
             f"(sleep {sleep_desc})"
         )
 
-    runner = TaskRunner(
-        runner_cfg, TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry)
+    runner = build_runner(
+        "translate",
+        provider_settings,
+        TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry),
     )
     specs: list[TaskSpec] = []
     for idx, node in enumerate(tasks):
@@ -363,9 +330,7 @@ async def _run_translate_async(
             )
         )
 
-    with progress:
-        task_id = progress.add_task("[TRANSLATE] Processing", total=len(specs))
-        await runner.run(specs)
+    await runner.run(specs)
 
     return results
 

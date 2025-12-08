@@ -1,5 +1,3 @@
-import math
-import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -8,16 +6,14 @@ import anyio
 import httpx
 import typer
 from loguru import logger
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
 
-from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
+from command_utils import (
+    ProgressReporter,
+    ProviderSettings,
+    build_runner,
+    load_provider_settings,
+)
+from task_runner import TaskHooks, TaskSpec
 from utils import (
     compile_regex,
     configure_logging,
@@ -29,25 +25,6 @@ from utils import (
 )
 
 API_URL = "https://api.hume.ai/v0/tts/file"
-
-
-def derive_concurrency(rpm: int, override: int | None = None) -> int:
-    """Compute a reasonable concurrency to approach the rpm target."""
-    if override:
-        return max(1, int(override))
-    cpus = os.cpu_count() or 4
-    est = max(1, math.ceil(rpm / 30))
-    return max(1, min(cpus, est))
-
-
-def load_retry_defaults(config: dict) -> RetryConfig:
-    retry_cfg = config.get("retry", {})
-    return RetryConfig(
-        attempts=int(retry_cfg.get("attempts", 3)),
-        backoff_base=float(retry_cfg.get("backoff_base", 0.5)),
-        backoff_max=float(retry_cfg.get("backoff_max", 8.0)),
-        jitter=bool(retry_cfg.get("jitter", True)),
-    )
 
 
 def build_payload(
@@ -111,20 +88,6 @@ async def synthesize_once(
     return out_path
 
 
-def build_runner_config(
-    config: dict, voice_cfg: dict, concurrency_override: int | None = None
-) -> RunnerConfig:
-    """Construct RunnerConfig from provider rpm and retry defaults."""
-    hume_cfg = config.get("hume_ai", {})
-    rpm = int(get_config_value(config, "hume_ai", "rpm", required=False, default=60))
-    retry = load_retry_defaults(config)
-    concurrency = derive_concurrency(
-        rpm,
-        concurrency_override or hume_cfg.get("concurrency") or voice_cfg.get("max_workers"),
-    )
-    return RunnerConfig(name="voice", rpm=rpm, concurrency=int(concurrency), retry=retry)
-
-
 def generate_voice(
     input_file: Path | None = None,
     output_dir: Path | None = None,
@@ -143,11 +106,20 @@ def generate_voice(
     """Generate voice files from cached translations using Hume."""
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
-    api_key = get_config_value(config, "hume_ai", "api_key")
     voice_cfg = config.get("voice", {})
     hume_cfg = config.get("hume_ai", {})
+    provider_settings = load_provider_settings(
+        config,
+        provider_key="hume_ai",
+        default_model="octave",
+        default_rpm=10,
+        concurrency_override=voice_cfg.get("max_workers"),
+    )
+    api_key = provider_settings.api_key
 
-    model = get_config_value(config, "hume_ai", "model", required=False, default="octave")
+    model = get_config_value(
+        config, "hume_ai", "model", required=False, default=provider_settings.model
+    )
     provider = provider or voice_cfg.get("provider", "HUME_AI")
     voice_name = get_config_value(config, "hume_ai", "voice_name", required=False, default="ivan")
     _target_language = target_language or voice_cfg.get("target_language", "Russian")
@@ -209,26 +181,23 @@ def generate_voice(
         logger.info("[VOICE] Nothing to process.")
         return
 
-    runner_cfg = build_runner_config(
-        config,
-        voice_cfg,
-        concurrency_override=voice_cfg.get("max_workers"),
-    )
     try:
-        results = anyio.run(
-            _run_voice_async,
-            worklist,
-            headers,
-            output_dir,
-            audio_format,
-            model,
-            voice_name,
-            provider,
-            split_utterances,
-            octave_version,
-            max_elapsed_seconds,
-            runner_cfg,
-        )
+        with ProgressReporter("[VOICE] Processing", total=len(worklist)) as reporter:
+            results = anyio.run(
+                _run_voice_async,
+                worklist,
+                headers,
+                output_dir,
+                audio_format,
+                model,
+                voice_name,
+                provider,
+                split_utterances,
+                octave_version,
+                max_elapsed_seconds,
+                provider_settings,
+                reporter,
+            )
     except KeyboardInterrupt:
         logger.warning("[VOICE] Interrupted by user.")
         raise SystemExit(130)
@@ -255,37 +224,32 @@ async def _run_voice_async(
     split_utterances: bool,
     octave_version: str,
     max_elapsed_seconds: float | None,
-    runner_cfg: RunnerConfig,
+    provider_settings: ProviderSettings,
+    reporter: ProgressReporter,
 ) -> list[tuple[str, str]]:
     """Execute Hume synthesis tasks via TaskRunner."""
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        transient=True,
-    )
     results: list[tuple[str, str]] = []
 
     async def on_success(spec: TaskSpec, _result: Path) -> None:
         results.append((spec.task_id, "ok"))
-        progress.update(task_id, advance=1)
+        reporter.advance()
 
     async def on_failure(spec: TaskSpec, exc: BaseException) -> None:
         logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
         results.append((spec.task_id, "error"))
-        progress.update(task_id, advance=1)
+        reporter.advance()
 
     def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
         sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
         logger.warning(
-            f"[VOICE] {spec.task_id} retry {attempt}/{runner_cfg.retry.attempts} "
+            f"[VOICE] {spec.task_id} retry {attempt}/{provider_settings.retry.attempts} "
             f"(sleep {sleep_desc})"
         )
 
-    runner = TaskRunner(
-        runner_cfg, TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry)
+    runner = build_runner(
+        "voice",
+        provider_settings,
+        TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry),
     )
     specs: list[TaskSpec] = []
     async with httpx.AsyncClient() as client:
@@ -317,9 +281,7 @@ async def _run_voice_async(
                 )
             )
 
-        with progress:
-            task_id = progress.add_task("[VOICE] Processing", total=len(specs))
-            await runner.run(specs)
+        await runner.run(specs)
 
     return results
 
