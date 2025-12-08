@@ -21,14 +21,6 @@ TaskFunc = Callable[[], Awaitable[Any]]
 
 
 @dataclass
-class RateLimitConfig:
-    """Rate limit of N calls per interval_seconds."""
-
-    max_per_interval: int
-    interval_seconds: float = 1.0
-
-
-@dataclass
 class RetryConfig:
     attempts: int = 3
     backoff_base: float = 1.0
@@ -39,8 +31,8 @@ class RetryConfig:
 @dataclass
 class RunnerConfig:
     name: str
+    rpm: int
     concurrency: int
-    rate_limit: RateLimitConfig
     retry: RetryConfig
 
 
@@ -48,7 +40,6 @@ class RunnerConfig:
 class TaskSpec:
     task_id: str
     coro_factory: TaskFunc
-    payload: Any | None = None
 
 
 @dataclass
@@ -68,15 +59,12 @@ class TaskHooks:
 
 
 class TaskRunner:
-    """Shared async runner with concurrency, rate limit, and retry handling."""
+    """Shared async runner with rpm-based rate limit, concurrency, and retries."""
 
     def __init__(self, config: RunnerConfig, hooks: TaskHooks | None = None):
         self.config = config
         self.hooks = hooks or TaskHooks()
-        self._limiter = AsyncLimiter(
-            max_rate=config.rate_limit.max_per_interval,
-            time_period=config.rate_limit.interval_seconds,
-        )
+        self._limiter = AsyncLimiter(max_rate=config.rpm, time_period=60)
         self._semaphore = anyio.Semaphore(config.concurrency)
 
     async def run(self, tasks: Iterable[TaskSpec]) -> list[TaskOutcome]:
@@ -93,6 +81,7 @@ class TaskRunner:
         self, spec: TaskSpec, outcomes: list[TaskOutcome], lock: anyio.Lock
     ) -> None:
         attempts = 0
+        result: Any | None = None
         retrying = self._make_retrying(spec)
 
         try:

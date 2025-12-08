@@ -1,11 +1,14 @@
+import functools
+import math
+import os
 import re
-import anyio
 from html import unescape
 from pathlib import Path
 from threading import Lock
 from typing import Any, Iterable, Optional, Tuple, TypedDict
 from xml.etree import ElementTree as ET
 
+import anyio
 import tiktoken
 import typer
 from loguru import logger
@@ -19,14 +22,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from task_runner import (
-    RateLimitConfig,
-    RetryConfig,
-    RunnerConfig,
-    TaskHooks,
-    TaskRunner,
-    TaskSpec,
-)
+from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
 from utils import (
     PROJECT_ROOT,
     compile_regex,
@@ -84,32 +80,23 @@ def count_tokens(encoding, text: str) -> int:
     return len(encoding.encode(text))
 
 
-def build_runner_config(
-    config: dict, translate_cfg: dict, concurrency_override: int | None = None
-) -> RunnerConfig:
-    """Construct RunnerConfig from provider-specific limits in config.toml."""
-    provider_cfg = config.get("openai", {})
-    rate_cfg = provider_cfg.get("rate_limit", {})
-    retry_cfg = provider_cfg.get("retry", {})
+def derive_concurrency(rpm: int, override: int | None = None) -> int:
+    """Compute a reasonable concurrency to approach the rpm target."""
+    if override:
+        return max(1, int(override))
+    cpus = os.cpu_count() or 4
+    # Aim for batches that meet rpm without overshooting CPUs.
+    est = max(1, math.ceil(rpm / 30))
+    return max(1, min(cpus, est))
 
-    concurrency = concurrency_override or translate_cfg.get("max_workers") or provider_cfg.get(
-        "concurrency", 5
-    )
-    rate_limit = RateLimitConfig(
-        max_per_interval=int(rate_cfg.get("max_per_interval", 3)),
-        interval_seconds=float(rate_cfg.get("interval_seconds", 1)),
-    )
-    retry = RetryConfig(
+
+def load_retry_defaults(config: dict) -> RetryConfig:
+    retry_cfg = config.get("retry", {})
+    return RetryConfig(
         attempts=int(retry_cfg.get("attempts", 3)),
         backoff_base=float(retry_cfg.get("backoff_base", 0.5)),
         backoff_max=float(retry_cfg.get("backoff_max", 8.0)),
         jitter=bool(retry_cfg.get("jitter", True)),
-    )
-    return RunnerConfig(
-        name="translate",
-        concurrency=int(concurrency),
-        rate_limit=rate_limit,
-        retry=retry,
     )
 
 
@@ -209,6 +196,7 @@ def translate_strings(
     model = model or get_config_value(
         config, "openai", "model", required=False, default="gpt-5-nano"
     )
+    rpm = int(get_config_value(config, "openai", "rpm", required=False, default=60))
     translate_cfg = config.get("translate", {})
     provider = get_config_value(config, "translate", "provider", required=False, default="openai")
     if str(provider).lower() != "openai":
@@ -257,7 +245,16 @@ def translate_strings(
 
     encoding = tiktoken.get_encoding("o200k_base") if count_tokens_enabled else None
     client = OpenAI(api_key=api_key)
-    runner_cfg = build_runner_config(config, translate_cfg, concurrency_override=max_workers)
+    retry_cfg = load_retry_defaults(config)
+    concurrency = derive_concurrency(
+        rpm, max_workers or config.get("openai", {}).get("concurrency")
+    )
+    runner_cfg = RunnerConfig(
+        name="translate",
+        rpm=rpm,
+        concurrency=concurrency,
+        retry=retry_cfg,
+    )
     try:
         results = anyio.run(
             _run_translate_async,
@@ -341,24 +338,24 @@ async def _run_translate_async(
     specs: list[TaskSpec] = []
     for idx, node in enumerate(tasks):
         task_name = node.get("name") or f"string-{idx}"
+        task_fn = functools.partial(
+            process_string,
+            node,
+            translate_pattern=translate_pattern,
+            ignore_pattern=ignore_pattern,
+            done=done,
+            progress_lock=progress_lock,
+            client=client,
+            progress_file=progress_file,
+            model=model,
+            dry_run=dry_run,
+            encoding=encoding,
+            target_language=target_language,
+        )
         specs.append(
             TaskSpec(
                 task_id=task_name,
-                payload=node,
-                coro_factory=lambda node=node: anyio.to_thread.run_sync(
-                    process_string,
-                    node,
-                    translate_pattern=translate_pattern,
-                    ignore_pattern=ignore_pattern,
-                    done=done,
-                    progress_lock=progress_lock,
-                    client=client,
-                    progress_file=progress_file,
-                    model=model,
-                    dry_run=dry_run,
-                    encoding=encoding,
-                    target_language=target_language,
-                ),
+                coro_factory=lambda fn=task_fn: anyio.to_thread.run_sync(fn),
             )
         )
 

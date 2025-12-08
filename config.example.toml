@@ -1,17 +1,8 @@
 [openai]
 api_key = ""
 model = "gpt-5-nano"
+rpm = 120
 concurrency = 5
-
-[openai.rate_limit]
-max_per_interval = 3
-interval_seconds = 1
-
-[openai.retry]
-attempts = 4
-backoff_base = 0.5
-backoff_max = 8
-jitter = true
 
 [hume_ai]
 api_key = ""
@@ -19,16 +10,13 @@ model = "octave"
 voice_name = "ivan"
 octave_version = "2"
 split_utterances = true
+rpm = 75
 concurrency = 4
 
-[hume_ai.rate_limit]
-max_per_interval = 1
-interval_seconds = 6
-
-[hume_ai.retry]
-attempts = 3
-backoff_base = 1
-backoff_max = 4
+[retry]
+attempts = 4
+backoff_base = 0.5
+backoff_max = 8
 jitter = true
 
 [translate]
@@ -53,5 +41,4 @@ stop_after = 0
 max_workers = 4
 target_language = "Russian"
 provider = "HUME_AI"
-jitter_fraction = 0.1
 max_elapsed_seconds = 600

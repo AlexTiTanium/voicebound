@@ -28,17 +28,8 @@ def write_config(tmp_path: Path) -> Path:
 [openai]
 api_key = "dummy-openai"
 model = "gpt-5-nano"
+rpm = 120
 concurrency = 2
-
-[openai.rate_limit]
-max_per_interval = 3
-interval_seconds = 1
-
-[openai.retry]
-attempts = 2
-backoff_base = 0.2
-backoff_max = 1.0
-jitter = true
 
 [hume_ai]
 api_key = "dummy-hume"
@@ -46,17 +37,8 @@ model = "octave"
 voice_name = "ivan"
 octave_version = "2"
 split_utterances = true
+rpm = 10
 concurrency = 2
-
-[hume_ai.rate_limit]
-max_per_interval = 1
-interval_seconds = 0.5
-
-[hume_ai.retry]
-attempts = 2
-backoff_base = 0.1
-backoff_max = 0.2
-jitter = true
 
 [voice]
 input_file = ".cache/progress.json"
@@ -70,6 +52,12 @@ target_language = "Spanish"
 provider = "HUME_AI"
 jitter_fraction = 0.1
 max_elapsed_seconds = 5
+
+[retry]
+attempts = 2
+backoff_base = 0.2
+backoff_max = 1.0
+jitter = true
         """,
         encoding="utf-8",
     )

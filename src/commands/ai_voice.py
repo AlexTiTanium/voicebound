@@ -1,3 +1,5 @@
+import math
+import os
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -15,14 +17,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from task_runner import (
-    RateLimitConfig,
-    RetryConfig,
-    RunnerConfig,
-    TaskHooks,
-    TaskRunner,
-    TaskSpec,
-)
+from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
 from utils import (
     compile_regex,
     configure_logging,
@@ -34,6 +29,25 @@ from utils import (
 )
 
 API_URL = "https://api.hume.ai/v0/tts/file"
+
+
+def derive_concurrency(rpm: int, override: int | None = None) -> int:
+    """Compute a reasonable concurrency to approach the rpm target."""
+    if override:
+        return max(1, int(override))
+    cpus = os.cpu_count() or 4
+    est = max(1, math.ceil(rpm / 30))
+    return max(1, min(cpus, est))
+
+
+def load_retry_defaults(config: dict) -> RetryConfig:
+    retry_cfg = config.get("retry", {})
+    return RetryConfig(
+        attempts=int(retry_cfg.get("attempts", 3)),
+        backoff_base=float(retry_cfg.get("backoff_base", 0.5)),
+        backoff_max=float(retry_cfg.get("backoff_max", 8.0)),
+        jitter=bool(retry_cfg.get("jitter", True)),
+    )
 
 
 def build_payload(
@@ -98,41 +112,17 @@ async def synthesize_once(
 
 
 def build_runner_config(
-    config: dict,
-    voice_cfg: dict,
-    concurrency_override: int | None = None,
-    jitter_override: float | None = None,
+    config: dict, voice_cfg: dict, concurrency_override: int | None = None
 ) -> RunnerConfig:
-    """Construct RunnerConfig from Hume provider limits."""
+    """Construct RunnerConfig from provider rpm and retry defaults."""
     hume_cfg = config.get("hume_ai", {})
-    rate_cfg = hume_cfg.get("rate_limit", {})
-    retry_cfg = hume_cfg.get("retry", {})
-
-    # Fallback to legacy fields if new config is absent.
-    request_delay = voice_cfg.get("request_delay_seconds", 5.5)
-    backoff_seq = voice_cfg.get("backoff_seconds", [1, 2, 4])
-
-    concurrency = concurrency_override or hume_cfg.get("concurrency") or voice_cfg.get("max_workers", 4)
-    rate_limit = RateLimitConfig(
-        max_per_interval=int(rate_cfg.get("max_per_interval", 1)),
-        interval_seconds=float(rate_cfg.get("interval_seconds", request_delay)),
+    rpm = int(get_config_value(config, "hume_ai", "rpm", required=False, default=60))
+    retry = load_retry_defaults(config)
+    concurrency = derive_concurrency(
+        rpm,
+        concurrency_override or hume_cfg.get("concurrency") or voice_cfg.get("max_workers"),
     )
-    retry = RetryConfig(
-        attempts=int(retry_cfg.get("attempts", voice_cfg.get("max_retries", 3))),
-        backoff_base=float(retry_cfg.get("backoff_base", backoff_seq[0] if backoff_seq else 1)),
-        backoff_max=float(retry_cfg.get("backoff_max", backoff_seq[-1] if backoff_seq else 4)),
-        jitter=bool(
-            retry_cfg.get(
-                "jitter", True if jitter_override is None else jitter_override > 0
-            )
-        ),
-    )
-    return RunnerConfig(
-        name="voice",
-        concurrency=int(concurrency),
-        rate_limit=rate_limit,
-        retry=retry,
-    )
+    return RunnerConfig(name="voice", rpm=rpm, concurrency=int(concurrency), retry=retry)
 
 
 def generate_voice(
@@ -148,7 +138,6 @@ def generate_voice(
     config_path: Path | None = None,
     log_level: str | None = None,
     color: bool = True,
-    jitter_fraction: float | None = None,
     max_elapsed_seconds: float | None = None,
 ) -> None:
     """Generate voice files from cached translations using Hume."""
@@ -171,9 +160,10 @@ def generate_voice(
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
     stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after
     octave_version = hume_cfg.get("octave_version", "2")
-    jitter_fraction = jitter_fraction if jitter_fraction is not None else voice_cfg.get("jitter_fraction", 0.1)
     max_elapsed_seconds = (
-        max_elapsed_seconds if max_elapsed_seconds is not None else voice_cfg.get("max_elapsed_seconds", None)
+        max_elapsed_seconds
+        if max_elapsed_seconds is not None
+        else voice_cfg.get("max_elapsed_seconds", None)
     )
 
     if not input_file.exists():
@@ -223,7 +213,6 @@ def generate_voice(
         config,
         voice_cfg,
         concurrency_override=voice_cfg.get("max_workers"),
-        jitter_override=jitter_fraction,
     )
     try:
         results = anyio.run(
@@ -314,7 +303,6 @@ async def _run_voice_async(
             specs.append(
                 TaskSpec(
                     task_id=key,
-                    payload=payload,
                     coro_factory=lambda payload=payload, out_path=out_path: synthesize_once(
                         client=client,
                         headers=headers,
