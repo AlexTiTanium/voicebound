@@ -1,5 +1,5 @@
 import re
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import anyio
 from html import unescape
 from pathlib import Path
 from threading import Lock
@@ -19,6 +19,14 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from task_runner import (
+    RateLimitConfig,
+    RetryConfig,
+    RunnerConfig,
+    TaskHooks,
+    TaskRunner,
+    TaskSpec,
+)
 from utils import (
     PROJECT_ROOT,
     compile_regex,
@@ -74,6 +82,35 @@ Do not add anything, do not modify structure, only translate the meaning:
 def count_tokens(encoding, text: str) -> int:
     """Return the token count for the given text using the provided encoding."""
     return len(encoding.encode(text))
+
+
+def build_runner_config(
+    config: dict, translate_cfg: dict, concurrency_override: int | None = None
+) -> RunnerConfig:
+    """Construct RunnerConfig from provider-specific limits in config.toml."""
+    provider_cfg = config.get("openai", {})
+    rate_cfg = provider_cfg.get("rate_limit", {})
+    retry_cfg = provider_cfg.get("retry", {})
+
+    concurrency = concurrency_override or translate_cfg.get("max_workers") or provider_cfg.get(
+        "concurrency", 5
+    )
+    rate_limit = RateLimitConfig(
+        max_per_interval=int(rate_cfg.get("max_per_interval", 3)),
+        interval_seconds=float(rate_cfg.get("interval_seconds", 1)),
+    )
+    retry = RetryConfig(
+        attempts=int(retry_cfg.get("attempts", 3)),
+        backoff_base=float(retry_cfg.get("backoff_base", 0.5)),
+        backoff_max=float(retry_cfg.get("backoff_max", 8.0)),
+        jitter=bool(retry_cfg.get("jitter", True)),
+    )
+    return RunnerConfig(
+        name="translate",
+        concurrency=int(concurrency),
+        rate_limit=rate_limit,
+        retry=retry,
+    )
 
 
 def process_string(
@@ -220,53 +257,26 @@ def translate_strings(
 
     encoding = tiktoken.get_encoding("o200k_base") if count_tokens_enabled else None
     client = OpenAI(api_key=api_key)
-
-    results = []
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    progress = Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        transient=True,
-    )
-    with progress:
-        try:
-            task_id = progress.add_task("[TRANSLATE] Processing", total=len(tasks))
-            future_map = {
-                executor.submit(
-                    process_string,
-                    node,
-                    translate_pattern=translate_pattern,
-                    ignore_pattern=ignore_pattern,
-                    done=done,
-                    progress_lock=progress_lock,
-                    client=client,
-                    progress_file=progress_file,
-                    model=model,
-                    dry_run=dry_run,
-                    encoding=encoding,
-                    target_language=target_language,
-                ): node
-                for node in tasks
-            }
-
-            for future in as_completed(future_map):
-                try:
-                    results.append(future.result())
-                except Exception as exc:  # pragma: no cover - safeguard
-                    name = future_map[future].get("name")
-                    logger.error(f"[TRANSLATE] Unhandled exception for {name}: {exc}")
-                    results.append((name, None, ("error", str(exc))))
-                finally:
-                    progress.update(task_id, advance=1)
-        except KeyboardInterrupt:
-            logger.warning("[TRANSLATE] Interrupted by user. Cancelling pending tasks.")
-            executor.shutdown(wait=False, cancel_futures=True)
-            raise SystemExit(130)
-        finally:
-            executor.shutdown(wait=True, cancel_futures=True)
+    runner_cfg = build_runner_config(config, translate_cfg, concurrency_override=max_workers)
+    try:
+        results = anyio.run(
+            _run_translate_async,
+            tasks,
+            translate_pattern,
+            ignore_pattern,
+            done,
+            progress_lock,
+            client,
+            progress_file,
+            model,
+            dry_run,
+            encoding,
+            target_language,
+            runner_cfg,
+        )
+    except KeyboardInterrupt:
+        logger.warning("[TRANSLATE] Interrupted by user.")
+        raise SystemExit(130)
 
     if dry_run:
         _print_dry_run(results)
@@ -283,6 +293,80 @@ def translate_strings(
     if summary["errors"]:
         logger.error(f"[TRANSLATE] Failed entries: {', '.join(summary['errors'])}")
     logger.success(f"[TRANSLATE] Output saved to: {output_file}")
+
+
+async def _run_translate_async(
+    tasks: list,
+    translate_pattern: re.Pattern[str],
+    ignore_pattern: re.Pattern[str],
+    done: dict,
+    progress_lock: Lock,
+    client: Any,
+    progress_file: Path,
+    model: str,
+    dry_run: bool,
+    encoding,
+    target_language: str,
+    runner_cfg: RunnerConfig,
+) -> list[tuple[str | None, str | None, str | tuple]]:
+    """Drive TaskRunner for translation tasks."""
+    results: list[tuple[str | None, str | None, str | tuple]] = []
+    progress = Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+
+    async def on_success(_spec: TaskSpec, result: tuple[str | None, str | None, str | tuple]):
+        results.append(result)
+        progress.update(task_id, advance=1)
+
+    async def on_failure(spec: TaskSpec, exc: BaseException):
+        results.append((spec.task_id, None, ("error", str(exc))))
+        progress.update(task_id, advance=1)
+
+    def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
+        sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
+        logger.warning(
+            f"[TRANSLATE] {spec.task_id} retry {attempt}/{runner_cfg.retry.attempts} "
+            f"(sleep {sleep_desc})"
+        )
+
+    runner = TaskRunner(
+        runner_cfg, TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry)
+    )
+    specs: list[TaskSpec] = []
+    for idx, node in enumerate(tasks):
+        task_name = node.get("name") or f"string-{idx}"
+        specs.append(
+            TaskSpec(
+                task_id=task_name,
+                payload=node,
+                coro_factory=lambda node=node: anyio.to_thread.run_sync(
+                    process_string,
+                    node,
+                    translate_pattern=translate_pattern,
+                    ignore_pattern=ignore_pattern,
+                    done=done,
+                    progress_lock=progress_lock,
+                    client=client,
+                    progress_file=progress_file,
+                    model=model,
+                    dry_run=dry_run,
+                    encoding=encoding,
+                    target_language=target_language,
+                ),
+            )
+        )
+
+    with progress:
+        task_id = progress.add_task("[TRANSLATE] Processing", total=len(specs))
+        await runner.run(specs)
+
+    return results
 
 
 def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> None:

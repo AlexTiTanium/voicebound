@@ -64,6 +64,17 @@ def write_config(tmp_path: Path) -> Path:
 [openai]
 api_key = "dummy-key"
 model = "gpt-5-nano"
+concurrency = 2
+
+[openai.rate_limit]
+max_per_interval = 3
+interval_seconds = 1
+
+[openai.retry]
+attempts = 2
+backoff_base = 0.2
+backoff_max = 1.0
+jitter = true
 
 [hume_ai]
 api_key = "dummy-hume"
@@ -71,6 +82,17 @@ model = "octave"
 voice_name = "ivan"
 octave_version = "2"
 split_utterances = true
+concurrency = 2
+
+[hume_ai.rate_limit]
+max_per_interval = 1
+interval_seconds = 0.5
+
+[hume_ai.retry]
+attempts = 2
+backoff_base = 0.1
+backoff_max = 0.2
+jitter = true
 
 [translate]
 input_file = "strings.xml"
@@ -289,10 +311,11 @@ def test_translate_keyboard_interrupt(monkeypatch, tmp_path):
     write_strings(tmp_path)
 
     monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
-    def _boom(*args, **kwargs):
+
+    async def _boom(*args, **kwargs):
         raise KeyboardInterrupt()
 
-    monkeypatch.setattr(ai_translate, "as_completed", _boom)
+    monkeypatch.setattr(ai_translate, "_run_translate_async", _boom)
 
     with pytest.raises(SystemExit):
         ai_translate.translate_strings(

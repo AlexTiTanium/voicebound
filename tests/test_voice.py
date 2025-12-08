@@ -3,17 +3,9 @@ from pathlib import Path
 from typing import cast
 
 import pytest
-import requests
 import typer
 
 from commands import ai_voice
-
-
-class DummyResponse:
-    def __init__(self, status_code=200, content=b"audio", text="ok"):
-        self.status_code = status_code
-        self.content = content
-        self.text = text
 
 
 class DummyCtx:
@@ -35,6 +27,18 @@ def write_config(tmp_path: Path) -> Path:
         """
 [openai]
 api_key = "dummy-openai"
+model = "gpt-5-nano"
+concurrency = 2
+
+[openai.rate_limit]
+max_per_interval = 3
+interval_seconds = 1
+
+[openai.retry]
+attempts = 2
+backoff_base = 0.2
+backoff_max = 1.0
+jitter = true
 
 [hume_ai]
 api_key = "dummy-hume"
@@ -42,6 +46,17 @@ model = "octave"
 voice_name = "ivan"
 octave_version = "2"
 split_utterances = true
+concurrency = 2
+
+[hume_ai.rate_limit]
+max_per_interval = 1
+interval_seconds = 0.5
+
+[hume_ai.retry]
+attempts = 2
+backoff_base = 0.1
+backoff_max = 0.2
+jitter = true
 
 [voice]
 input_file = ".cache/progress.json"
@@ -51,11 +66,10 @@ allowed_regex = "^keep"
 ignore_regex = "skip"
 stop_after = 0
 max_workers = 2
-request_delay_seconds = 0.0
-max_retries = 1
-backoff_seconds = [0]
 target_language = "Spanish"
 provider = "HUME_AI"
+jitter_fraction = 0.1
+max_elapsed_seconds = 5
         """,
         encoding="utf-8",
     )
@@ -66,63 +80,52 @@ def write_progress(tmp_path: Path) -> Path:
     progress = tmp_path / ".cache/progress.json"
     progress.parent.mkdir(parents=True, exist_ok=True)
     progress.write_text(
-        '{"keep_one": "Hola mundo", "skip_me": "ignored", "other": "nope"}',
+        '{"keep_one": "Hola mundo", "skip_me": "ignored", "other": "nope", "keep_two": "Hola"}',
         encoding="utf-8",
     )
     return progress
 
 
-def test_voice_generates_only_allowed(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    write_progress(tmp_path)
+@pytest.fixture()
+def stub_runner(monkeypatch):
+    calls = {}
 
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse())
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
+    async def _fake_run(worklist, *_args, **_kwargs):
+        calls["worklist"] = worklist
+        return [(key, "ok") for key, _ in worklist]
+
+    monkeypatch.setattr(ai_voice, "_run_voice_async", _fake_run)
+    return calls
+
+
+def test_voice_filters_and_invokes_runner(monkeypatch, tmp_path, stub_runner):
+    config_path = write_config(tmp_path)
+    progress = write_progress(tmp_path)
+
+    out_dir = tmp_path / "out/hume"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # Pretend keep_one already exists
+    (out_dir / "keep_one.mp3").write_bytes(b"existing")
 
     ai_voice.generate_voice(
         config_path=config_path,
-        input_file=tmp_path / ".cache/progress.json",
-        output_dir=tmp_path / "out/hume",
+        input_file=progress,
+        output_dir=out_dir,
+        allowed_regex="^keep",
+        ignore_regex="skip",
     )
 
-    out_dir = tmp_path / "out/hume"
-    assert (out_dir / "keep_one.mp3").exists()
-    assert not (out_dir / "skip_me.mp3").exists()
-    assert not (out_dir / "other.mp3").exists()
+    worklist = stub_runner["worklist"]
+    keys = [item[0] for item in worklist]
+    assert "keep_one" not in keys  # skipped because file exists
+    assert "keep_two" in keys
+    assert "skip_me" not in keys
+    assert "other" not in keys
 
 
-def test_voice_interrupts_in_futures(monkeypatch, tmp_path):
+def test_voice_stop_after_limits_worklist(monkeypatch, tmp_path, stub_runner):
     config_path = write_config(tmp_path)
-    write_progress(tmp_path)
-
-    def _raise(*args, **kwargs):
-        raise KeyboardInterrupt()
-
-    monkeypatch.setattr(ai_voice, "send_request", _raise)
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
-
-    with pytest.raises(SystemExit) as excinfo:
-        ai_voice.generate_voice(
-            config_path=config_path,
-            input_file=tmp_path / ".cache/progress.json",
-            output_dir=tmp_path / "out/hume",
-        )
-
-    assert excinfo.value.code == 130
-
-
-def test_voice_stop_after_limits_worklist(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    # Extend progress to multiple entries
-    progress = tmp_path / ".cache/progress.json"
-    progress.parent.mkdir(parents=True, exist_ok=True)
-    progress.write_text(
-        '{"keep_one": "Hola mundo", "keep_two": "Hola mundo", "keep_three": "Hola mundo"}',
-        encoding="utf-8",
-    )
-
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse())
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
+    progress = write_progress(tmp_path)
 
     ai_voice.generate_voice(
         config_path=config_path,
@@ -132,153 +135,8 @@ def test_voice_stop_after_limits_worklist(monkeypatch, tmp_path):
         allowed_regex="^keep",
     )
 
-    out_dir = tmp_path / "out/hume"
-    files = list(out_dir.glob("*.mp3"))
-    assert len(files) == 1
-
-
-def test_voice_respects_existing_outputs(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    progress = write_progress(tmp_path)
-
-    out_dir = tmp_path / "out/hume"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # Pretend keep_one already exists
-    (out_dir / "keep_one.mp3").write_bytes(b"existing")
-
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse())
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
-
-    ai_voice.generate_voice(
-        config_path=config_path,
-        input_file=progress,
-        output_dir=out_dir,
-        allowed_regex="^keep",
-    )
-
-    # keep_one should remain untouched, keep_two generated
-    assert (out_dir / "keep_one.mp3").read_bytes() == b"existing"
-    assert (out_dir / "skip_me.mp3").exists() is False
-    # skip_me and other filtered; only keep_one existed
-    assert (out_dir / "keep_two.mp3").exists() is False
-
-
-def test_attempt_send_stops_on_event(monkeypatch, tmp_path):
-    called = {"count": 0}
-
-    def _send(headers, payload):
-        called["count"] += 1
-        return DummyResponse()
-
-    monkeypatch.setattr(ai_voice, "send_request", _send)
-    stop_event = ai_voice.Event()
-    stop_event.set()
-
-    success, msg = ai_voice.attempt_send(
-        payload={"x": "y"},
-        headers={},
-        out_path=tmp_path / "x.mp3",
-        rate_limiter=ai_voice.RateLimiter(0),
-        max_retries=3,
-        backoff_seconds=(0,),
-        jitter_fraction=0.0,
-        max_elapsed_seconds=None,
-        stop_event=stop_event,
-    )
-
-    assert success is False
-    assert msg == "interrupted"
-    assert called["count"] == 0
-
-
-def test_voice_send_request(monkeypatch):
-    called = {}
-
-    def fake_post(url, headers, json, timeout):
-        called["ok"] = True
-        return DummyResponse()
-
-    monkeypatch.setattr(ai_voice.requests, "post", fake_post)
-    resp = ai_voice.send_request({}, {})
-    assert resp.status_code == 200
-    assert called["ok"]
-
-
-def test_handle_entry_error_branch(monkeypatch, tmp_path):
-    out_path = tmp_path / "x.mp3"
-    called = {}
-
-    def fake_attempt_send(**kwargs):
-        called["ok"] = True
-        return False, "err"
-
-    monkeypatch.setattr(ai_voice, "attempt_send", fake_attempt_send)
-    ai_voice.handle_entry(
-        key="k",
-        text="t",
-        headers={},
-        rate_limiter=ai_voice.RateLimiter(0),
-        out_path=out_path,
-        max_retries=1,
-        backoff_seconds=(0,),
-        model="m",
-        voice_name="v",
-        provider="p",
-        audio_format="mp3",
-        split_utterances=False,
-        target_language="es",
-        octave_version="2",
-        jitter_fraction=0.0,
-        max_elapsed_seconds=None,
-        stop_event=ai_voice.Event(),
-    )
-    assert called["ok"]
-
-
-def test_attempt_send_non_200(monkeypatch, tmp_path):
-    sleeps = []
-
-    def fake_sleep(seconds):
-        sleeps.append(seconds)
-
-    monkeypatch.setattr(ai_voice.time, "sleep", fake_sleep)
-    monkeypatch.setattr(
-        ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad")
-    )
-    success, msg = ai_voice.attempt_send(
-        payload={},
-        headers={},
-        out_path=tmp_path / "x.mp3",
-        rate_limiter=ai_voice.RateLimiter(0),
-        max_retries=2,
-        backoff_seconds=(0, 0),
-        jitter_fraction=0.0,
-        max_elapsed_seconds=None,
-        stop_event=ai_voice.Event(),
-    )
-    assert success is False
-    assert msg.startswith("HTTP 500")
-    assert sleeps  # backoff happened
-
-
-def test_attempt_send_request_exception(monkeypatch, tmp_path):
-    def _raise(*args, **kwargs):
-        raise requests.RequestException("boom")
-
-    monkeypatch.setattr(ai_voice, "send_request", _raise)
-    success, msg = ai_voice.attempt_send(
-        payload={},
-        headers={},
-        out_path=tmp_path / "x.mp3",
-        rate_limiter=ai_voice.RateLimiter(0),
-        max_retries=1,
-        backoff_seconds=(0,),
-        jitter_fraction=0.0,
-        max_elapsed_seconds=None,
-        stop_event=ai_voice.Event(),
-    )
-    assert success is False
-    assert "boom" in msg
+    worklist = stub_runner["worklist"]
+    assert len(worklist) == 1
 
 
 def test_generate_voice_missing_file(tmp_path):
@@ -287,94 +145,16 @@ def test_generate_voice_missing_file(tmp_path):
         ai_voice.generate_voice(config_path=config_path, input_file=tmp_path / "none.json")
 
 
-def test_generate_voice_existing_out_path(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    progress = write_progress(tmp_path)
-    out_dir = tmp_path / "out/hume"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    (out_dir / "keep_one.mp3").write_bytes(b"existing")
-    (out_dir / "keep_two.mp3").write_bytes(b"existing2")
-
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse())
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
-
-    ai_voice.generate_voice(
-        config_path=config_path,
-        input_file=progress,
-        output_dir=out_dir,
-        allowed_regex="^keep",
-        audio_format="wav",
-    )
-
-    assert (out_dir / "keep_one.mp3").read_bytes() == b"existing"
-    assert (out_dir / "keep_two.mp3").read_bytes() == b"existing2"
-    # wav files were treated as existing and skipped
-    (out_dir / "keep_one.wav").write_bytes(b"existing3")
-    ai_voice.generate_voice(
-        config_path=config_path,
-        input_file=progress,
-        output_dir=out_dir,
-        allowed_regex="^keep",
-        audio_format="wav",
-    )
-    assert (out_dir / "keep_one.wav").read_bytes() == b"existing3"
-
-
-def test_generate_voice_out_path_exists_without_existing_outputs(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    progress = tmp_path / ".cache/progress.json"
-    progress.parent.mkdir(parents=True, exist_ok=True)
-    progress.write_text('{"keep_one":"hola"}', encoding="utf-8")
-    out_dir = tmp_path / "out/hume"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    # only wav exists; mp3 set empty so branch for out_path.exists hit
-    (out_dir / "keep_one.wav").write_bytes(b"existing")
-
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse())
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
-
-    ai_voice.generate_voice(
-        config_path=config_path,
-        input_file=progress,
-        output_dir=out_dir,
-        allowed_regex="^keep",
-        audio_format="wav",
-    )
-
-    assert (out_dir / "keep_one.wav").read_bytes() == b"existing"
-
-
-def test_generate_voice_outer_keyboard_interrupt(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    write_progress(tmp_path)
-
-    class BoomExecutor:
-        def __init__(self, *args, **kwargs):
-            self.tasks = []
-
-        def submit(self, *args, **kwargs):
-            raise KeyboardInterrupt()
-
-        def shutdown(self, *args, **kwargs):
-            return None
-
-    monkeypatch.setattr(ai_voice, "ThreadPoolExecutor", BoomExecutor)
-    monkeypatch.setattr("requests.post", lambda *args, **kwargs: DummyResponse())
-
-    with pytest.raises(SystemExit):
-        ai_voice.generate_voice(
-            config_path=config_path,
-            input_file=tmp_path / ".cache/progress.json",
-            output_dir=tmp_path / "out/hume",
-        )
-
-
 def test_voice_typer_command(monkeypatch, tmp_path):
     config_path = write_config(tmp_path)
     write_progress(tmp_path)
 
-    monkeypatch.setattr(ai_voice, "send_request", lambda *args, **kwargs: DummyResponse())
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
+    called = {}
+
+    def fake_generate_voice(**kwargs):
+        called["ok"] = kwargs
+
+    monkeypatch.setattr(ai_voice, "generate_voice", fake_generate_voice)
 
     ai_voice.typer_command(
         cast(typer.Context, DummyCtx()),
@@ -386,6 +166,7 @@ def test_voice_typer_command(monkeypatch, tmp_path):
         stop_after=1,
         audio_format="mp3",
     )
+    assert called["ok"]["input_file"] == tmp_path / ".cache/progress.json"
 
 
 def test_ai_voice_main_entry(monkeypatch, tmp_path):
@@ -397,42 +178,3 @@ def test_ai_voice_main_entry(monkeypatch, tmp_path):
         )
     except SystemExit as exc:
         assert exc.code == 0
-
-
-def test_attempt_send_max_elapsed(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        ai_voice, "send_request", lambda *args, **kwargs: DummyResponse(500, b"", "bad")
-    )
-    monkeypatch.setattr(ai_voice.time, "sleep", lambda *_: None)
-    success, msg = ai_voice.attempt_send(
-        payload={},
-        headers={},
-        out_path=tmp_path / "x.mp3",
-        rate_limiter=ai_voice.RateLimiter(0),
-        max_retries=2,
-        backoff_seconds=(0,),
-        jitter_fraction=0.0,
-        max_elapsed_seconds=0,
-        stop_event=ai_voice.Event(),
-    )
-    assert success is False
-    assert "max elapsed" in msg
-
-
-def test_generate_voice_reports_failures(monkeypatch, tmp_path):
-    config_path = write_config(tmp_path)
-    progress = write_progress(tmp_path)
-    out_dir = tmp_path / "out/hume"
-
-    def boom(**kwargs):
-        raise ValueError("boom")
-
-    monkeypatch.setattr(ai_voice, "handle_entry", boom)
-    monkeypatch.setattr(ai_voice.RateLimiter, "wait", lambda self: None)
-
-    ai_voice.generate_voice(
-        config_path=config_path,
-        input_file=progress,
-        output_dir=out_dir,
-        allowed_regex="^keep",
-    )

@@ -1,11 +1,9 @@
-import random
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from threading import Event
 from typing import Any, Dict, Optional
 
-import requests
+import anyio
+import httpx
 import typer
 from loguru import logger
 from rich.progress import (
@@ -17,8 +15,15 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
+from task_runner import (
+    RateLimitConfig,
+    RetryConfig,
+    RunnerConfig,
+    TaskHooks,
+    TaskRunner,
+    TaskSpec,
+)
 from utils import (
-    RateLimiter,
     compile_regex,
     configure_logging,
     ensure_directory,
@@ -66,125 +71,68 @@ def build_payload(
     }
 
 
-def send_request(headers: Dict[str, str], payload: Dict[str, Any]) -> requests.Response:
-    """POST to Hume TTS endpoint."""
-    return requests.post(API_URL, headers=headers, json=payload, timeout=120)
+async def send_request(
+    client: httpx.AsyncClient, headers: Dict[str, str], payload: Dict[str, Any]
+) -> httpx.Response:
+    """POST to Hume TTS endpoint using an async client."""
+    return await client.post(API_URL, headers=headers, json=payload, timeout=120)
 
 
-def handle_entry(
+async def synthesize_once(
     *,
-    key: str,
-    text: str,
+    client: httpx.AsyncClient,
     headers: Dict[str, str],
-    rate_limiter: RateLimiter,
-    out_path: Path,
-    max_retries: int,
-    backoff_seconds: tuple[int, ...],
-    model: str,
-    voice_name: str,
-    provider: str,
-    audio_format: str,
-    split_utterances: bool,
-    target_language: str,
-    octave_version: str,
-    jitter_fraction: float,
-    max_elapsed_seconds: float | None,
-    stop_event: Event,
-) -> None:
-    """Process one entry end-to-end: build payload, send, and persist result.
-
-    Args:
-        key: Progress key for naming output.
-        text: Text to synthesize.
-        headers: HTTP headers including API key.
-        rate_limiter: Shared rate limiter instance.
-        out_path: Destination file path.
-        max_retries: How many retries to attempt.
-        backoff_seconds: Backoff schedule between retries.
-        model: TTS model to use.
-        voice_name: Voice name.
-        provider: Provider identifier.
-        audio_format: Audio format string.
-        split_utterances: Whether to split utterances server-side.
-        target_language: Informational target language string.
-        octave_version: API version for Octave.
-        stop_event: Event used to cancel in-flight work.
-    """
-    logger.info(f"[VOICE] {key} start")
-    payload = build_payload(
-        text,
-        model=model,
-        voice_name=voice_name,
-        provider=provider,
-        audio_format=audio_format,
-        split_utterances=split_utterances,
-        octave_version=octave_version,
-    )
-    success, error_message = attempt_send(
-        payload=payload,
-        headers=headers,
-        out_path=out_path,
-        rate_limiter=rate_limiter,
-        max_retries=max_retries,
-        backoff_seconds=backoff_seconds,
-        jitter_fraction=jitter_fraction,
-        max_elapsed_seconds=max_elapsed_seconds,
-        stop_event=stop_event,
-    )
-
-    if not success:
-        logger.error(f"[VOICE] {key} error: {error_message}")
-    else:
-        logger.info(f"[VOICE] {key} done")
-
-
-def attempt_send(
-    *,
     payload: Dict[str, Any],
-    headers: Dict[str, str],
     out_path: Path,
-    rate_limiter: RateLimiter,
-    max_retries: int,
-    backoff_seconds: tuple[int, ...],
-    jitter_fraction: float,
     max_elapsed_seconds: float | None,
-    stop_event: Event,
-) -> tuple[bool, str]:
-    """Handle retries, backoff, and file write for one payload; obeys rate limit."""
-    attempt = 0
-    success = False
-    error_message = ""
+) -> Path:
+    """Send one synthesis request and persist the audio file."""
     start = time.perf_counter()
+    response = await send_request(client, headers, payload)
+    if response.status_code != 200:
+        raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
+    if max_elapsed_seconds is not None and (time.perf_counter() - start) > max_elapsed_seconds:
+        raise TimeoutError(f"max elapsed {max_elapsed_seconds}s exceeded")
+    await anyio.to_thread.run_sync(out_path.write_bytes, response.content)
+    return out_path
 
-    while attempt < max_retries and not success:
-        if stop_event.is_set():
-            return False, "interrupted"
-        logger.debug(f"[VOICE] {out_path.stem} attempt {attempt + 1}")
-        rate_limiter.wait()
-        attempt += 1
-        try:
-            response = send_request(headers, payload)
-            if response.status_code == 200:
-                out_path.write_bytes(response.content)
-                success = True
-            else:
-                error_message = f"HTTP {response.status_code}: {response.text}"
-        except KeyboardInterrupt:
-            logger.warning(f"[VOICE] {out_path.stem} interrupted during attempt {attempt}")
-            raise
-        except requests.RequestException as exc:
-            error_message = str(exc)
 
-        if not success and attempt < max_retries:
-            base_sleep = backoff_seconds[min(attempt - 1, len(backoff_seconds) - 1)]
-            jitter = base_sleep * jitter_fraction
-            sleep_for = max(0, base_sleep + random.uniform(-jitter, jitter))
-            logger.warning(f"[VOICE] {out_path.stem} retry after {sleep_for:.2f}s")
-            time.sleep(sleep_for)
-        if max_elapsed_seconds is not None and (time.perf_counter() - start) > max_elapsed_seconds:
-            return False, f"max elapsed {max_elapsed_seconds}s exceeded"
+def build_runner_config(
+    config: dict,
+    voice_cfg: dict,
+    concurrency_override: int | None = None,
+    jitter_override: float | None = None,
+) -> RunnerConfig:
+    """Construct RunnerConfig from Hume provider limits."""
+    hume_cfg = config.get("hume_ai", {})
+    rate_cfg = hume_cfg.get("rate_limit", {})
+    retry_cfg = hume_cfg.get("retry", {})
 
-    return success, error_message
+    # Fallback to legacy fields if new config is absent.
+    request_delay = voice_cfg.get("request_delay_seconds", 5.5)
+    backoff_seq = voice_cfg.get("backoff_seconds", [1, 2, 4])
+
+    concurrency = concurrency_override or hume_cfg.get("concurrency") or voice_cfg.get("max_workers", 4)
+    rate_limit = RateLimitConfig(
+        max_per_interval=int(rate_cfg.get("max_per_interval", 1)),
+        interval_seconds=float(rate_cfg.get("interval_seconds", request_delay)),
+    )
+    retry = RetryConfig(
+        attempts=int(retry_cfg.get("attempts", voice_cfg.get("max_retries", 3))),
+        backoff_base=float(retry_cfg.get("backoff_base", backoff_seq[0] if backoff_seq else 1)),
+        backoff_max=float(retry_cfg.get("backoff_max", backoff_seq[-1] if backoff_seq else 4)),
+        jitter=bool(
+            retry_cfg.get(
+                "jitter", True if jitter_override is None else jitter_override > 0
+            )
+        ),
+    )
+    return RunnerConfig(
+        name="voice",
+        concurrency=int(concurrency),
+        rate_limit=rate_limit,
+        retry=retry,
+    )
 
 
 def generate_voice(
@@ -203,19 +151,7 @@ def generate_voice(
     jitter_fraction: float | None = None,
     max_elapsed_seconds: float | None = None,
 ) -> None:
-    """Generate voice files from cached translations using Hume.
-
-    Args:
-        input_file: Progress JSON path (overrides config when provided).
-        output_dir: Directory to write audio outputs.
-        target_language: Descriptive target language string.
-        allowed_regex: Regex for allowed keys.
-        ignore_regex: Regex for keys to skip.
-        stop_after: Limit number of items to process.
-        audio_format: Audio format extension/type.
-        provider: Voice provider identifier.
-        config_path: Path to config.toml.
-    """
+    """Generate voice files from cached translations using Hume."""
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     api_key = get_config_value(config, "hume_ai", "api_key")
@@ -225,7 +161,7 @@ def generate_voice(
     model = get_config_value(config, "hume_ai", "model", required=False, default="octave")
     provider = provider or voice_cfg.get("provider", "HUME_AI")
     voice_name = get_config_value(config, "hume_ai", "voice_name", required=False, default="ivan")
-    target_language = target_language or voice_cfg.get("target_language", "Russian")
+    _target_language = target_language or voice_cfg.get("target_language", "Russian")
     split_utterances = hume_cfg.get("split_utterances", True)
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
@@ -234,22 +170,12 @@ def generate_voice(
     allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
     stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after
-    max_workers = voice_cfg.get("max_workers", 4)
-    request_delay_seconds = voice_cfg.get("request_delay_seconds", 5.5)
-    max_retries = voice_cfg.get("max_retries", 3)
-    backoff_seconds = tuple(voice_cfg.get("backoff_seconds", [1, 2, 4]))
-    target_language = target_language or voice_cfg.get("target_language", "Russian")
     octave_version = hume_cfg.get("octave_version", "2")
-    jitter_fraction = (
-        jitter_fraction if jitter_fraction is not None else voice_cfg.get("jitter_fraction", 0.1)
-    )
+    jitter_fraction = jitter_fraction if jitter_fraction is not None else voice_cfg.get("jitter_fraction", 0.1)
     max_elapsed_seconds = (
-        max_elapsed_seconds
-        if max_elapsed_seconds is not None
-        else voice_cfg.get("max_elapsed_seconds", None)
+        max_elapsed_seconds if max_elapsed_seconds is not None else voice_cfg.get("max_elapsed_seconds", None)
     )
 
-    stop_event = Event()
     if not input_file.exists():
         raise SystemExit(f"Progress file not found: {input_file}. Run translate first.")
 
@@ -259,10 +185,9 @@ def generate_voice(
         "Content-Type": "application/json",
         "X-Hume-Api-Key": api_key,
     }
-    rate_limiter = RateLimiter(request_delay_seconds)
-    existing_outputs = (
-        {path.stem for path in output_dir.glob("*.mp3")} if output_dir.exists() else set()
-    )
+    existing_outputs = {
+        path.stem for path in output_dir.glob(f"*.{audio_format}")
+    } if output_dir.exists() else set()
 
     logger.info(f"[VOICE] Found {len(existing_outputs)} existing outputs; skipping those keys.")
     worklist: list[tuple[str, str]] = []
@@ -294,11 +219,56 @@ def generate_voice(
         logger.info("[VOICE] Nothing to process.")
         return
 
-    logger.info(f"[VOICE] Starting generation with {max_workers} workers.")
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    interrupted = False
-    failures: list[str] = []
-    successes: list[str] = []
+    runner_cfg = build_runner_config(
+        config,
+        voice_cfg,
+        concurrency_override=voice_cfg.get("max_workers"),
+        jitter_override=jitter_fraction,
+    )
+    try:
+        results = anyio.run(
+            _run_voice_async,
+            worklist,
+            headers,
+            output_dir,
+            audio_format,
+            model,
+            voice_name,
+            provider,
+            split_utterances,
+            octave_version,
+            max_elapsed_seconds,
+            runner_cfg,
+        )
+    except KeyboardInterrupt:
+        logger.warning("[VOICE] Interrupted by user.")
+        raise SystemExit(130)
+
+    successes = [name for name, status in results if status == "ok"]
+    failures = [name for name, status in results if status == "error"]
+
+    logger.info(
+        f"[VOICE] Run complete. generated={len(successes)} failures={len(failures)} "
+        f"skipped={len(existing_outputs)}"
+    )
+    if failures:
+        logger.error(f"[VOICE] Failed entries: {', '.join(failures)}")
+
+
+async def _run_voice_async(
+    worklist: list[tuple[str, str]],
+    headers: dict[str, str],
+    output_dir: Path,
+    audio_format: str,
+    model: str,
+    voice_name: str,
+    provider: str,
+    split_utterances: bool,
+    octave_version: str,
+    max_elapsed_seconds: float | None,
+    runner_cfg: RunnerConfig,
+) -> list[tuple[str, str]]:
+    """Execute Hume synthesis tasks via TaskRunner."""
     progress = Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
@@ -307,65 +277,59 @@ def generate_voice(
         TimeElapsedColumn(),
         transient=True,
     )
-    with progress:
-        try:
-            task_id = progress.add_task("[VOICE] Processing", total=len(worklist))
-            futures = []
-            for key, text in worklist:
-                out_path = output_dir / f"{key}.{audio_format}"
-                futures.append(
-                    executor.submit(
-                        handle_entry,
-                        key=key,
-                        text=text,
-                        headers=headers,
-                        rate_limiter=rate_limiter,
-                        out_path=out_path,
-                        max_retries=max_retries,
-                        backoff_seconds=backoff_seconds,
-                        model=model,
-                        voice_name=voice_name,
-                        provider=provider,
-                        audio_format=audio_format,
-                        split_utterances=split_utterances,
-                        target_language=target_language,
-                        octave_version=octave_version,
-                        jitter_fraction=jitter_fraction,
-                        max_elapsed_seconds=max_elapsed_seconds,
-                        stop_event=stop_event,
-                    )
-                )
-            for future, (key, _) in zip(futures, worklist):
-                try:
-                    future.result()
-                    successes.append(key)
-                except KeyboardInterrupt:
-                    logger.warning("[VOICE] Interrupted; stopping remaining futures.")
-                    interrupted = True
-                    stop_event.set()
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    raise SystemExit(130)
-                except Exception as exc:  # pragma: no cover - safeguard
-                    failures.append(key)
-                    logger.error(f"[VOICE] Unhandled exception for {key}: {exc}")
-                finally:
-                    progress.update(task_id, advance=1)
-        except KeyboardInterrupt:
-            logger.warning("[VOICE] Interrupted by user. Cancelling pending tasks.")
-            interrupted = True
-            stop_event.set()
-            executor.shutdown(wait=False, cancel_futures=True)
-            raise SystemExit(130)
-        finally:
-            if not interrupted:
-                executor.shutdown(wait=True, cancel_futures=True)
+    results: list[tuple[str, str]] = []
 
-    logger.info(
-        f"[VOICE] Run complete. generated={len(successes)} failures={len(failures)} "
-        f"skipped={len(existing_outputs)}"
+    async def on_success(spec: TaskSpec, _result: Path) -> None:
+        results.append((spec.task_id, "ok"))
+        progress.update(task_id, advance=1)
+
+    async def on_failure(spec: TaskSpec, exc: BaseException) -> None:
+        logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
+        results.append((spec.task_id, "error"))
+        progress.update(task_id, advance=1)
+
+    def on_retry(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
+        sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
+        logger.warning(
+            f"[VOICE] {spec.task_id} retry {attempt}/{runner_cfg.retry.attempts} "
+            f"(sleep {sleep_desc})"
+        )
+
+    runner = TaskRunner(
+        runner_cfg, TaskHooks(on_success=on_success, on_failure=on_failure, on_retry=on_retry)
     )
-    if failures:
-        logger.error(f"[VOICE] Failed entries: {', '.join(failures)}")
+    specs: list[TaskSpec] = []
+    async with httpx.AsyncClient() as client:
+        for key, text in worklist:
+            out_path = output_dir / f"{key}.{audio_format}"
+            payload = build_payload(
+                text,
+                model=model,
+                voice_name=voice_name,
+                provider=provider,
+                audio_format=audio_format,
+                split_utterances=split_utterances,
+                octave_version=octave_version,
+            )
+            specs.append(
+                TaskSpec(
+                    task_id=key,
+                    payload=payload,
+                    coro_factory=lambda payload=payload, out_path=out_path: synthesize_once(
+                        client=client,
+                        headers=headers,
+                        payload=payload,
+                        out_path=out_path,
+                        max_elapsed_seconds=max_elapsed_seconds,
+                    ),
+                )
+            )
+
+        with progress:
+            task_id = progress.add_task("[VOICE] Processing", total=len(specs))
+            await runner.run(specs)
+
+    return results
 
 
 def typer_command(
