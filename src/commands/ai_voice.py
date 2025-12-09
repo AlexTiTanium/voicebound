@@ -8,7 +8,14 @@ import typer
 from loguru import logger
 
 from command_context import run_with_progress
-from command_utils import ProviderSettings, build_runner, load_provider_settings
+from command_utils import (
+    ProviderSettings,
+    build_runner,
+    build_task_specs,
+    build_voice_worklist,
+    load_progress,
+    load_provider_settings,
+)
 from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
@@ -17,7 +24,6 @@ from utils import (
     ensure_directory,
     get_config_value,
     load_config,
-    load_json,
     resolve_path,
 )
 
@@ -144,7 +150,7 @@ def generate_voice(
     if not input_file.exists():
         raise SystemExit(f"Progress file not found: {input_file}. Run translate first.")
 
-    progress = load_json(input_file, default={})
+    progress = load_progress(input_file, default={})
     ensure_directory(output_dir)
     headers = {
         "Content-Type": "application/json",
@@ -155,28 +161,17 @@ def generate_voice(
     } if output_dir.exists() else set()
 
     logger.info(f"[VOICE] Found {len(existing_outputs)} existing outputs; skipping those keys.")
-    worklist: list[tuple[str, str]] = []
     allowed_pattern = compile_regex(allowed_regex, label="allowed")
     ignore_pattern = compile_regex(ignore_regex, label="ignore") if ignore_regex else None
-
-    for key, text in progress.items():
-        if stop_after and len(worklist) >= stop_after:
-            logger.info(f"[VOICE] stop_after reached at {stop_after} items.")
-            break
-        if key in existing_outputs:
-            logger.debug(f"[VOICE] {key} skipped (already generated).")
-            continue
-        if ignore_pattern and ignore_pattern.match(key):
-            logger.debug(f"[VOICE] {key} skipped (ignore regex).")
-            continue
-        if not allowed_pattern.match(key):
-            logger.debug(f"[VOICE] {key} skipped (regex).")
-            continue
-        out_path = output_dir / f"{key}.{audio_format}"
-        if out_path.exists():
-            logger.debug(f"[VOICE] {key} skipped (exists).")
-            continue
-        worklist.append((key, text))
+    worklist = build_voice_worklist(
+        progress,
+        allowed_pattern,
+        ignore_pattern,
+        existing_outputs,
+        stop_after,
+        output_dir,
+        audio_format,
+    )
 
     logger.info(f"[VOICE] Worklist size: {len(worklist)}")
 
@@ -230,7 +225,7 @@ async def _run_voice_async(
     results: list[tuple[str, str]] = []
 
     runner = build_runner("voice", provider_settings, TaskHooks())
-    specs: list[TaskSpec] = []
+    work_items: list[tuple[str, Any]] = []
     async with httpx.AsyncClient() as client:
         for key, text in worklist:
             out_path = output_dir / f"{key}.{audio_format}"
@@ -253,12 +248,7 @@ async def _run_voice_async(
                     max_elapsed_seconds=max_elapsed_seconds,
                 )
 
-            specs.append(
-                TaskSpec(
-                    task_id=key,
-                    coro_factory=coro,
-                )
-            )
+            work_items.append((key, coro))
 
         def success_cb(spec: TaskSpec, _result: Path) -> None:
             results.append((spec.task_id, "ok"))
@@ -278,9 +268,9 @@ async def _run_voice_async(
 
         await run_with_progress(
             "voice",
-            len(specs),
+            len(work_items),
             runner,
-            specs,
+            build_task_specs(work_items),
             summary,
             success_cb=success_cb,
             failure_cb=failure_cb,

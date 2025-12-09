@@ -4,7 +4,6 @@ from html import unescape
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable, Iterable, Optional, Tuple, TypedDict
-from xml.etree import ElementTree as ET
 
 import anyio
 import tiktoken
@@ -12,8 +11,15 @@ import typer
 from loguru import logger
 from openai import OpenAI
 
-from command_context import CommandContext, build_tasks, make_command_context, run_with_progress
-from command_utils import ProviderSettings, build_runner
+from command_context import CommandContext, make_command_context, run_with_progress
+from command_utils import (
+    ProviderSettings,
+    build_runner,
+    build_task_specs,
+    load_progress,
+    load_strings,
+    persist_progress,
+)
 from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
@@ -21,9 +27,7 @@ from utils import (
     compile_regex,
     ensure_directory,
     get_config_value,
-    load_json,
     resolve_path,
-    write_json,
 )
 
 
@@ -126,7 +130,7 @@ def process_string(
 
     with progress_lock:
         done[name] = translated
-        write_json(progress_file, done)
+        persist_progress(progress_file, done)
 
     logger.info(f"[SAVED] {name} progress updated in {progress_file}.")
     return name, translated, "translated"
@@ -208,10 +212,9 @@ def translate_strings(
     ensure_directory(output_file.parent)
     ensure_directory(progress_file.parent)
 
-    tree = ET.parse(input_file)
-    root = tree.getroot()
+    tree, root = load_strings(input_file)
 
-    done = load_json(progress_file, default={}) or {}
+    done = load_progress(progress_file, default={}) or {}
     progress_lock = Lock()
     tasks = list(root.findall("string"))
 
@@ -297,7 +300,7 @@ async def _run_translate_async(
 
         work_items.append((task_name, coro))
 
-    specs = build_tasks(work_items)
+    specs = build_task_specs(work_items)
     def success_cb(spec: TaskSpec, result):
         results.append(result)
         status = result[2]

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Iterable, Optional
 
 from loguru import logger
 from rich.progress import (
@@ -15,8 +16,8 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner
-from utils import get_config_value
+from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
+from utils import get_config_value, load_json, write_json
 
 
 @dataclass
@@ -80,6 +81,88 @@ def build_runner(name: str, settings: ProviderSettings, hooks: TaskHooks) -> Tas
         retry=settings.retry,
     )
     return TaskRunner(runner_cfg, hooks)
+
+
+def build_task_specs(
+    worklist: Iterable[tuple[str, Callable[[], Awaitable[Any]]]],
+) -> list[TaskSpec]:
+    specs: list[TaskSpec] = []
+    for task_id, coro_factory in worklist:
+        async def wrapper(fn=coro_factory):
+            return await fn()
+
+        specs.append(TaskSpec(task_id=task_id, coro_factory=wrapper))
+    return specs
+
+
+@dataclass
+class OutcomeCollector:
+    name: str
+    successes: list[str] = field(default_factory=list)
+    failures: list[str] = field(default_factory=list)
+
+    def record_success(self, task_id: str | None) -> None:
+        if task_id:
+            self.successes.append(task_id)
+
+    def record_failure(self, task_id: str | None, _exc: BaseException | None = None) -> None:
+        if task_id:
+            self.failures.append(task_id)
+
+
+@dataclass
+class RunnerCallbacks:
+    on_success: Callable[[TaskSpec, Any], None] | None = None
+    on_failure: Callable[[TaskSpec, BaseException], None] | None = None
+    on_retry: Callable[[TaskSpec, int, float | None], None] | None = None
+
+
+def log_retry(
+    command: str, task_id: str, attempt: int, total: int, sleep_for: float | None
+) -> None:
+    sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
+    logger.warning(f"[{command.upper()}] {task_id} retry {attempt}/{total} (sleep {sleep_desc})")
+
+
+def load_strings(path: Path):
+    import xml.etree.ElementTree as ET
+
+    tree = ET.parse(path)
+    return tree, tree.getroot()
+
+
+def persist_progress(path: Path, data: Any) -> None:
+    write_json(path, data)
+
+
+def load_progress(path: Path, default: Any = None) -> Any:
+    return load_json(path, default=default)
+
+
+def build_voice_worklist(
+    progress: dict[str, str],
+    allowed_pattern,
+    ignore_pattern,
+    existing_outputs: set[str],
+    stop_after: int,
+    output_dir: Path,
+    audio_format: str,
+) -> list[tuple[str, str]]:
+    worklist: list[tuple[str, str]] = []
+    for key, text in progress.items():
+        if stop_after and len(worklist) >= stop_after:
+            break
+        if key in existing_outputs:
+            continue
+        if ignore_pattern and ignore_pattern.match(key):
+            continue
+        if not allowed_pattern.match(key):
+            continue
+        out_path = output_dir / f"{key}.{audio_format}"
+        if out_path.exists():
+            continue
+        worklist.append((key, text))
+    return worklist
 
 
 class ProgressReporter:
