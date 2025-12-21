@@ -8,6 +8,7 @@ from xml.etree import ElementTree as ET
 import pytest
 import typer
 
+import translation_api
 from commands import ai_translate
 
 
@@ -54,7 +55,7 @@ class DummyCtx:
 
 @pytest.fixture(autouse=True)
 def patch_tiktoken(monkeypatch):
-    monkeypatch.setattr(ai_translate.tiktoken, "get_encoding", lambda *_: DummyEncoding())
+    monkeypatch.setattr(translation_api.tiktoken, "get_encoding", lambda *_: DummyEncoding())
 
 
 def write_config(tmp_path: Path) -> Path:
@@ -180,7 +181,7 @@ def test_translate_uses_cache_and_skips_api(monkeypatch, tmp_path):
         return "Hola cached"
 
     monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
-    monkeypatch.setattr(ai_translate, "translate_text", _translate_text)
+    monkeypatch.setattr(translation_api, "translate_text", _translate_text)
 
     output_file = tmp_path / "out/values/strings.xml"
 
@@ -216,7 +217,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         )
 
     # direct function coverage
-    assert ai_translate.clean_text(None) is None
+    assert translation_api.clean_text(None) is None
 
     # trigger warning path
     cfg_text = config_path.read_text(encoding="utf-8").replace(
@@ -233,7 +234,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     # call translate_text directly
     dummy_client = DummyOpenAI("k", "Hola mundo")
     assert (
-        ai_translate.translate_text(dummy_client, "hola", "gpt-5-nano", "Spanish")
+        translation_api.translate_text(dummy_client, "hola", "gpt-5-nano", "Spanish")
         == "Hola mundo"
     )
 
@@ -243,7 +244,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     # empty branch
     node = ET.Element("string", {"name": "empty"})
     node.text = ""
-    result = ai_translate.process_string(
+    result = translation_api.process_string(
         node,
         translate_pattern=re.compile(r"^empty"),
         ignore_pattern=re.compile(r"^$"),
@@ -260,7 +261,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
 
     # dry-run branch
     node.text = "Text"
-    result = ai_translate.process_string(
+    result = translation_api.process_string(
         node,
         translate_pattern=re.compile(r"^empty"),
         ignore_pattern=re.compile(r"^$"),
@@ -277,7 +278,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
 
     # zero-token branch (no encoding) with translation and cache update
     progress_file = tmp_path / "p3.json"
-    name, translated, status = ai_translate.process_string(
+    name, translated, status = translation_api.process_string(
         node,
         translate_pattern=re.compile(r"^empty"),
         ignore_pattern=re.compile(r"^$"),
@@ -303,7 +304,7 @@ def test_translate_keyboard_interrupt(monkeypatch, tmp_path):
     async def _boom(*args, **kwargs):
         raise KeyboardInterrupt()
 
-    monkeypatch.setattr(ai_translate, "_run_translate_async", _boom)
+    monkeypatch.setattr(translation_api.TranslationService, "translate_nodes_async", _boom)
 
     with pytest.raises(SystemExit):
         ai_translate.translate_strings(
@@ -353,9 +354,10 @@ def test_translate_reports_errors(monkeypatch, tmp_path):
     write_strings(tmp_path)
 
     monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola"))
-    monkeypatch.setattr(
-        ai_translate, "process_string", lambda *args, **kwargs: ("bad", None, ("error", "boom"))
-    )
+    async def _return_error(self, *args, **kwargs):
+        return [("bad", None, ("error", "boom"))]
+
+    monkeypatch.setattr(translation_api.TranslationService, "translate_nodes_async", _return_error)
 
     output_file = tmp_path / "out/values/strings.xml"
     ai_translate.translate_strings(
