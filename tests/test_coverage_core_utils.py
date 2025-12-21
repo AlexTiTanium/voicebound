@@ -201,7 +201,11 @@ def test_task_runner_retry_error_path(monkeypatch):
     outcomes: list = []
 
     async def _run():
-        await runner._run_single(TaskSpec(task_id="boom", coro_factory=boom), outcomes, anyio.Lock())
+        await runner._run_single(
+            TaskSpec(task_id="boom", coro_factory=boom),
+            outcomes,
+            anyio.Lock(),
+        )
 
     anyio.run(_run)
     assert outcomes[0].ok is False

@@ -1,5 +1,4 @@
 import re
-from pathlib import Path
 from threading import Lock
 from xml.etree.ElementTree import Element
 
