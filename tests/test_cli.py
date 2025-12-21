@@ -131,8 +131,8 @@ def test_cli_voice_smoke(monkeypatch, tmp_path):
     monkeypatch.setattr("cli.ai_voice.generate_voice", fake_generate_voice)
 
     cfg = tmp_path / "config.toml"
-    progress = tmp_path / ".cache/progress.json"
-    out_dir = tmp_path / "out"
+    progress = tmp_path / "tmp-cache/progress.json"
+    out_dir = tmp_path / "tmp-output"
     result = runner.invoke(
         app,
         [

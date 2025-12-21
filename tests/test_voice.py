@@ -22,9 +22,11 @@ class DummyCtx:
 
 
 def write_config(tmp_path: Path) -> Path:
+    input_file = tmp_path / "tmp-cache/progress.json"
+    output_dir = tmp_path / "tmp-output/hume"
     config = tmp_path / "config.toml"
     config.write_text(
-        """
+        f"""
 [openai]
 api_key = "dummy-openai"
 model = "gpt-5-nano"
@@ -41,8 +43,8 @@ rpm = 10
 concurrency = 2
 
 [voice]
-input_file = ".cache/progress.json"
-output_dir = "out/hume"
+input_file = "{input_file.as_posix()}"
+output_dir = "{output_dir.as_posix()}"
 audio_format = "mp3"
 allowed_regex = "^keep"
 ignore_regex = "skip"
@@ -65,7 +67,7 @@ jitter = true
 
 
 def write_progress(tmp_path: Path) -> Path:
-    progress = tmp_path / ".cache/progress.json"
+    progress = tmp_path / "tmp-cache/progress.json"
     progress.parent.mkdir(parents=True, exist_ok=True)
     progress.write_text(
         '{"keep_one": "Hola mundo", "skip_me": "ignored", "other": "nope", "keep_two": "Hola"}',
@@ -90,7 +92,7 @@ def test_voice_filters_and_invokes_runner(monkeypatch, tmp_path, stub_runner):
     config_path = write_config(tmp_path)
     progress = write_progress(tmp_path)
 
-    out_dir = tmp_path / "out/hume"
+    out_dir = tmp_path / "tmp-output/hume"
     out_dir.mkdir(parents=True, exist_ok=True)
     # Pretend keep_one already exists
     (out_dir / "keep_one.mp3").write_bytes(b"existing")
@@ -146,7 +148,7 @@ def test_voice_typer_command(monkeypatch, tmp_path):
 
     ai_voice.typer_command(
         cast(typer.Context, DummyCtx()),
-        input_file=tmp_path / ".cache/progress.json",
+        input_file=tmp_path / "tmp-cache/progress.json",
         output_dir=tmp_path / "out/hume",
         config_path=config_path,
         allowed_regex="^keep",
@@ -154,7 +156,7 @@ def test_voice_typer_command(monkeypatch, tmp_path):
         stop_after=1,
         audio_format="mp3",
     )
-    assert called["ok"]["input_file"] == tmp_path / ".cache/progress.json"
+    assert called["ok"]["input_file"] == tmp_path / "tmp-cache/progress.json"
 
 
 def test_ai_voice_main_entry(monkeypatch, tmp_path):

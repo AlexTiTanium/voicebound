@@ -17,8 +17,8 @@ jitter=true
 
 [translate]
 input_file="strings.xml"
-output_file="out/values/strings.xml"
-progress_file=".cache/progress.json"
+output_file="tmp-output/strings.xml"
+progress_file="tmp-cache/progress.json"
 allowed_regex="^keep"
 ignore_regex="skip"
 dry_run=false

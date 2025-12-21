@@ -5,13 +5,22 @@ from threading import Lock
 from typing import cast
 from xml.etree import ElementTree as ET
 
+import anyio
 import pytest
 import typer
 
 from apis import translation_api
-from apis.translation_api import TranslationResult
+from apis.translation_api import (
+    TranslationFilters,
+    TranslationProgress,
+    TranslationResult,
+    TranslationSettings,
+)
 from commands import ai_translate
+from core.summary_reporter import SummaryReporter
+from core.task_runner import RetryConfig
 from providers import openai_provider
+from utils.command_utils import ProviderSettings
 
 
 class DummyEncoding:
@@ -73,9 +82,11 @@ def patch_tiktoken(monkeypatch):
 
 
 def write_config(tmp_path: Path) -> Path:
+    output_file = tmp_path / "tmp-output/strings.xml"
+    progress_file = tmp_path / "tmp-cache/progress.json"
     config = tmp_path / "config.toml"
     config.write_text(
-        """
+        f"""
 [openai]
 api_key = "dummy-key"
 model = "gpt-5-nano"
@@ -99,8 +110,8 @@ jitter = true
 
 [translate]
 input_file = "strings.xml"
-output_file = "out/values/strings.xml"
-progress_file = ".cache/progress.json"
+output_file = "{output_file.as_posix()}"
+progress_file = "{progress_file.as_posix()}"
 allowed_regex = "^keep"
 ignore_regex = "skip"
 dry_run = false
@@ -188,7 +199,7 @@ def test_translate_uses_cache_and_skips_api(monkeypatch, tmp_path):
     write_strings(tmp_path)
 
     # Prepare cache with pretranslated value
-    progress = tmp_path / ".cache/progress.json"
+    progress = tmp_path / "tmp-cache/progress.json"
     progress.parent.mkdir(parents=True, exist_ok=True)
     progress.write_text('{"keep_one": "Cached text"}', encoding="utf-8")
 
@@ -224,7 +235,7 @@ def test_translate_skips_runner_when_all_cached(monkeypatch, tmp_path):
     config_path = write_config(tmp_path)
     write_strings(tmp_path)
 
-    progress = tmp_path / ".cache/progress.json"
+    progress = tmp_path / "tmp-cache/progress.json"
     progress.parent.mkdir(parents=True, exist_ok=True)
     progress.write_text(
         '{"keep_one": "Cached one", "keep_two": "Cached two"}',
@@ -268,6 +279,61 @@ def test_allowed_regex_matches_chp1_and_chp1a():
     assert pattern.match("chp1_17_16__a")
     assert pattern.match("chp1a_17_16__a")
     assert not pattern.match("chp10_0_1__a")
+
+
+def test_translate_nodes_async_dry_run_uses_distinct_nodes(tmp_path):
+    provider_settings = ProviderSettings(
+        api_key="dummy",
+        model="dummy",
+        rpm=60,
+        concurrency=2,
+        retry=RetryConfig(),
+    )
+    service = translation_api.TranslationService(DummyProvider("Hola"), provider_settings)
+
+    nodes: list[ET.Element] = []
+    for name, text in (
+        ("chp1_11_1__a", "First text"),
+        ("chp1_12_1__a", "Second text"),
+        ("chp1_epi_1__a", "Third text"),
+    ):
+        node = ET.Element("string")
+        node.set("name", name)
+        node.text = text
+        nodes.append(node)
+
+    filters = TranslationFilters(
+        allowed_pattern=re.compile(r"^chp1"),
+        ignore_pattern=re.compile(r"^$"),
+    )
+    settings = TranslationSettings(
+        model="dummy",
+        target_language="es",
+        dry_run=True,
+        count_tokens_enabled=False,
+    )
+    progress = TranslationProgress(
+        done={},
+        progress_file=tmp_path / "progress.json",
+        progress_lock=Lock(),
+    )
+    summary = SummaryReporter("translate")
+
+    async def _run() -> list[TranslationResult]:
+        return await service.translate_nodes_async(
+            nodes,
+            filters=filters,
+            progress=progress,
+            settings=settings,
+            summary=summary,
+        )
+
+    results = anyio.run(_run)
+
+    names = [name for name, _, _ in results]
+    assert len(names) == 3
+    assert set(names) == {"chp1_11_1__a", "chp1_12_1__a", "chp1_epi_1__a"}
+    assert all(isinstance(status, tuple) and status[0] == "dry-run" for _, _, status in results)
 
 
 def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
@@ -434,7 +500,7 @@ def test_translate_reports_errors(monkeypatch, tmp_path):
 
     monkeypatch.setattr(translation_api.TranslationService, "translate_nodes_async", _return_error)
 
-    output_file = tmp_path / "out/values/strings.xml"
+    output_file = tmp_path / "strings.out.xml"
     ai_translate.translate_strings(
         config_path=config_path,
         input_file=tmp_path / "strings.xml",

@@ -361,7 +361,7 @@ class TranslationService:
                 encoding=encoding,
             )
 
-            async def coro() -> TranslationResult:
+            async def coro(task_fn: Callable[[], TranslationResult] = task_fn) -> TranslationResult:
                 """
                 Run the synchronous node translation in a worker thread.
 

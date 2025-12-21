@@ -82,10 +82,10 @@ def test_generate_voice_no_provider(monkeypatch, tmp_path):
 
 def test_generate_voice_empty_worklist(monkeypatch, tmp_path):
     config_path = _write_config(tmp_path)
-    progress = tmp_path / ".cache/progress.json"
+    progress = tmp_path / "tmp-cache/progress.json"
     progress.parent.mkdir(parents=True, exist_ok=True)
     progress.write_text("{}", encoding="utf-8")
-    output_dir = tmp_path / "out"
+    output_dir = tmp_path / "tmp-output"
     output_dir.mkdir()
     called = {}
 
@@ -104,10 +104,10 @@ def test_generate_voice_empty_worklist(monkeypatch, tmp_path):
 
 def test_generate_voice_keyboard_interrupt(monkeypatch, tmp_path):
     config_path = _write_config(tmp_path)
-    progress = tmp_path / ".cache/progress.json"
+    progress = tmp_path / "tmp-cache/progress.json"
     progress.parent.mkdir(parents=True, exist_ok=True)
     progress.write_text('{"keep_one": "Hola"}', encoding="utf-8")
-    output_dir = tmp_path / "out"
+    output_dir = tmp_path / "tmp-output"
     output_dir.mkdir()
 
     def _raise(*_args, **_kwargs):
