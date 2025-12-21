@@ -40,6 +40,20 @@ else:
 
 @dataclass
 class ProviderSettings:
+    """
+    Configuration for a provider runtime session.
+
+    Attributes:
+        api_key: User-supplied secret used to authenticate API calls.
+        model: User/config-selected model identifier.
+        rpm: Requests-per-minute rate limit from user/config.
+        concurrency: Derived or user-specified concurrency cap.
+        retry: Retry configuration derived from config.
+
+    Example:
+        >>> settings = ProviderSettings(api_key="sk-...", model="gpt-5-nano", rpm=60, concurrency=4, retry=RetryConfig())
+    """
+
     api_key: str
     model: str
     rpm: int
@@ -66,6 +80,15 @@ def derive_concurrency(rpm: int, override: int | None = None) -> int:
 
 
 def load_retry_defaults(config: Mapping[str, Any]) -> RetryConfig:
+    """
+    Load retry settings from the top-level config.
+
+    Args:
+        config: Full configuration mapping (user-supplied).
+
+    Returns:
+        A RetryConfig instance populated from config defaults.
+    """
     retry_cfg = config.get("retry", {})
     return RetryConfig(
         attempts=int(retry_cfg.get("attempts", 3)),
@@ -148,6 +171,7 @@ def build_task_specs(
     for task_id, coro_factory in worklist:
 
         async def wrapper(fn=coro_factory):
+            """Invoke the task coroutine factory and await its result."""
             return await fn()
 
         specs.append(TaskSpec(task_id=task_id, coro_factory=wrapper))
@@ -160,6 +184,10 @@ class OutcomeCollector:
     Collects success and failure IDs from task execution.
 
     Useful for simple reporting where full TaskOutcome objects are not needed.
+
+    Example:
+        >>> collector = OutcomeCollector("translate")
+        >>> collector.record_success("chp1_hello")
     """
 
     name: str
@@ -167,10 +195,23 @@ class OutcomeCollector:
     failures: list[str] = field(default_factory=list)
 
     def record_success(self, task_id: str | None) -> None:
+        """
+        Record a successful task by its ID.
+
+        Args:
+            task_id: Task identifier emitted by the runner.
+        """
         if task_id:
             self.successes.append(task_id)
 
     def record_failure(self, task_id: str | None, _exc: BaseException | None = None) -> None:
+        """
+        Record a failed task by its ID.
+
+        Args:
+            task_id: Task identifier emitted by the runner.
+            _exc: Exception for the failure (unused, kept for signature parity).
+        """
         if task_id:
             self.failures.append(task_id)
 
@@ -181,6 +222,9 @@ class RunnerCallbacks:
     Container for task runner callbacks.
 
     Holds functions to be called on success, failure, and retry events.
+
+    Example:
+        >>> callbacks = RunnerCallbacks(on_success=lambda spec, result: None)
     """
 
     on_success: Callable[[TaskSpec[Any], Any], None] | None = None
@@ -294,7 +338,13 @@ def build_voice_worklist(
 
 
 class ProgressReporter:
-    """Unified progress reporter wrapping rich.Progress; safe to use as context manager."""
+    """
+    Unified progress reporter wrapping rich.Progress; safe to use as context manager.
+
+    Example:
+        >>> with ProgressReporter("Processing", total=3) as progress:
+        ...     progress.advance()
+    """
 
     def __init__(self, description: str, total: int):
         """
@@ -317,14 +367,34 @@ class ProgressReporter:
         self._task_id: TaskID | None = None
 
     def __enter__(self) -> ProgressReporter:
+        """
+        Start the progress bar and return self.
+
+        Returns:
+            The active ProgressReporter instance.
+        """
         self._task_id = self._progress.add_task(self.description, total=self.total)
         self._progress.__enter__()
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
+        """
+        Tear down the progress bar on context exit.
+
+        Args:
+            exc_type: Exception type, if any.
+            exc: Exception instance, if any.
+            tb: Traceback, if any.
+        """
         self._progress.__exit__(exc_type, exc, tb)
 
     def advance(self, step: int = 1) -> None:
+        """
+        Advance the progress bar by a number of steps.
+
+        Args:
+            step: Number of increments to apply (default: 1).
+        """
         if self._task_id is None:
             return
         try:

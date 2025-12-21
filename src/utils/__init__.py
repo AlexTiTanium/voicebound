@@ -220,7 +220,13 @@ def write_json(path: Path, data: Any) -> None:
 
 
 class RateLimiter:
-    """Thread-safe rate limiter that enforces a minimum delay between calls."""
+    """
+    Thread-safe rate limiter that enforces a minimum delay between calls.
+
+    Example:
+        >>> limiter = RateLimiter(min_interval=1.0)
+        >>> limiter.wait()
+    """
 
     def __init__(self, min_interval: float):
         """

@@ -23,7 +23,24 @@ if TYPE_CHECKING:
 
 
 class TokenEncoder(Protocol):
-    def encode(self, text: str) -> list[int]: ...
+    """
+    Protocol for token encoders used to count tokens.
+
+    Example:
+        >>> tokens = encoder.encode("hello")
+    """
+
+    def encode(self, text: str) -> list[int]:
+        """
+        Encode text into a list of token IDs.
+
+        Args:
+            text: Input text to tokenize (user content).
+
+        Returns:
+            A list of integer token IDs.
+        """
+        ...
 
 
 StatusLiteral = Literal["ignored", "empty", "loaded", "skipped", "translated"]
@@ -35,12 +52,36 @@ TranslationResult = tuple[str, str | None, TranslationStatus]
 
 @dataclass(frozen=True)
 class TranslationFilters:
+    """
+    Regex filters that control which keys are translated.
+
+    Attributes:
+        allowed_pattern: User/config-supplied allowlist regex.
+        ignore_pattern: User/config-supplied ignore regex.
+
+    Example:
+        >>> filters = TranslationFilters(allowed_pattern=re.compile(r"^chp"), ignore_pattern=re.compile(r"app_name"))
+    """
+
     allowed_pattern: re.Pattern[str]
     ignore_pattern: re.Pattern[str]
 
 
 @dataclass(frozen=True)
 class TranslationSettings:
+    """
+    Settings that drive translation behavior.
+
+    Attributes:
+        model: User/config-selected model identifier.
+        target_language: User/config-selected target language.
+        dry_run: User-supplied flag to skip API calls.
+        count_tokens_enabled: User/config flag to count tokens.
+
+    Example:
+        >>> settings = TranslationSettings(model="gpt-5-nano", target_language="Spanish", dry_run=False, count_tokens_enabled=True)
+    """
+
     model: str
     target_language: str
     dry_run: bool
@@ -49,6 +90,18 @@ class TranslationSettings:
 
 @dataclass
 class TranslationProgress:
+    """
+    Mutable progress state for translation runs.
+
+    Attributes:
+        done: Cache of already translated keys.
+        progress_file: Path to the JSON cache file.
+        progress_lock: Lock for safe concurrent updates.
+
+    Example:
+        >>> progress = TranslationProgress(done={}, progress_file=Path("progress.json"), progress_lock=Lock())
+    """
+
     done: dict[str, str | None]
     progress_file: Path
     progress_lock: Lock
@@ -68,11 +121,25 @@ def count_tokens(encoding, text: str) -> int:
 
 
 class TranslationService:
-    """Reusable translation API for string resources."""
+    """
+    Reusable translation API for string resources.
+
+    Example:
+        >>> service = TranslationService(provider)
+        >>> service.translate_text("Hello", "gpt-5-nano", "Spanish")
+        'Hola'
+    """
 
     def __init__(
         self, provider: TranslationProvider, provider_settings: ProviderSettings | None = None
     ):
+        """
+        Initialize the service with a provider implementation.
+
+        Args:
+            provider: TranslationProvider implementation.
+            provider_settings: Optional runtime settings (needed for async batch).
+        """
         self._provider = provider
         self._provider_settings = provider_settings
 
@@ -172,6 +239,19 @@ class TranslationService:
         settings: TranslationSettings,
         encoding: TokenEncoder | None,
     ) -> TranslationResult:
+        """
+        Translate a single XML node with caching and filtering.
+
+        Args:
+            node: XML node containing a string resource.
+            filters: Regex filters derived from user/config inputs.
+            progress: Progress state used for caching and persistence.
+            settings: Translation settings, including user-configured model/language.
+            encoding: Optional token encoder for counting tokens.
+
+        Returns:
+            A TranslationResult tuple (name, translated_text, status).
+        """
         name = node.get("name") or ""
         original = (node.text or "").strip()
         matches_regex = bool(filters.allowed_pattern.match(name))
@@ -265,6 +345,12 @@ class TranslationService:
             )
 
             async def coro() -> TranslationResult:
+                """
+                Run the synchronous node translation in a worker thread.
+
+                Returns:
+                    A TranslationResult tuple for the node.
+                """
                 return await to_thread.run_sync(task_fn)
 
             work_items.append((task_name, coro))
@@ -272,6 +358,13 @@ class TranslationService:
         specs = build_task_specs(work_items)
 
         def success_cb(spec: TaskSpec[TranslationResult], result: TranslationResult) -> None:
+            """
+            Record a successful translation result.
+
+            Args:
+                spec: TaskSpec identifying the node.
+                result: TranslationResult from the provider call.
+            """
             results.append(result)
             status = result[2]
             if isinstance(status, tuple):
@@ -280,6 +373,13 @@ class TranslationService:
                 summary.record_translation(status, result[0])
 
         def failure_cb(spec: TaskSpec[TranslationResult], exc: BaseException) -> None:
+            """
+            Record a failed translation result.
+
+            Args:
+                spec: TaskSpec identifying the node.
+                exc: Exception raised by the provider call.
+            """
             results.append((spec.task_id, None, ("error", str(exc))))
             summary.record_translation("error", spec.task_id)
 

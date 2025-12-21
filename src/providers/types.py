@@ -10,7 +10,13 @@ if TYPE_CHECKING:
 
 
 class TranslationProvider(Protocol):
-    """Protocol defining the interface for translation providers."""
+    """
+    Protocol defining the interface for translation providers.
+
+    Example:
+        >>> provider.translate_text("Hello", "gpt-5-nano", "Spanish")
+        'Hola'
+    """
 
     key: str
     name: str
@@ -33,7 +39,12 @@ class TranslationProvider(Protocol):
 
 
 class VoiceProvider(Protocol):
-    """Protocol defining the interface for voice synthesis providers."""
+    """
+    Protocol defining the interface for voice synthesis providers.
+
+    Example:
+        >>> headers = provider.build_headers(settings)
+    """
 
     key: str
     name: str

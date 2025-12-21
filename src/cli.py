@@ -17,7 +17,13 @@ app = typer.Typer(
 )
 
 
-def version_callback(value: bool):
+def version_callback(value: bool) -> None:
+    """
+    Print the application version and exit when the flag is set.
+
+    Args:
+        value: User-supplied flag from the CLI option callback.
+    """
     if value:
         typer.echo(APP_VERSION)
         raise typer.Exit()
@@ -44,17 +50,20 @@ def main(
         help="Show version and exit.",
     ),
 ) -> None:
-    """Global options applied to all subcommands."""
+    """
+    Global options applied to all subcommands.
+
+    Args:
+        ctx: Typer context populated by the CLI runtime.
+        config_path: User-supplied config path override (CLI flag).
+        log_level: User-supplied log verbosity (CLI flag).
+        no_color: User-supplied flag to disable colored logging.
+        version: User-supplied flag to print version and exit.
+    """
     ctx.ensure_object(dict)
     ctx.obj["config_path"] = config_path
     ctx.obj["log_level"] = log_level
     ctx.obj["color"] = not no_color
-    """
-    VoiceBound: AI-powered translation and voice generation tool.
-
-    This is the main entry point for the CLI. It handles global options like
-    configuration path and logging level.
-    """
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()

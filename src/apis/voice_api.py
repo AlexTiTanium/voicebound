@@ -19,20 +19,66 @@ if TYPE_CHECKING:
 
 
 class VoiceFormat(TypedDict):
+    """
+    Audio format payload for the voice API.
+
+    Attributes:
+        type: Audio format identifier (user/config supplied, e.g., "mp3").
+
+    Example:
+        >>> fmt: VoiceFormat = {"type": "mp3"}
+    """
+
     type: str
 
 
 class VoiceMeta(TypedDict):
+    """
+    Voice metadata included in the API payload.
+
+    Attributes:
+        name: Voice name chosen by the user/config.
+        provider: Voice provider identifier.
+
+    Example:
+        >>> meta: VoiceMeta = {"name": "ivan", "provider": "hume_ai"}
+    """
+
     name: str
     provider: str
 
 
 class VoiceUtterance(TypedDict):
+    """
+    One utterance entry in the voice API payload.
+
+    Attributes:
+        text: Text to synthesize (user-provided content from translations).
+        voice: Voice metadata describing provider and voice name.
+
+    Example:
+        >>> utterance: VoiceUtterance = {"text": "Hello", "voice": {"name": "ivan", "provider": "hume_ai"}}
+    """
+
     text: str
     voice: VoiceMeta
 
 
 class VoicePayload(TypedDict):
+    """
+    Full JSON payload sent to the voice provider.
+
+    Attributes:
+        model: Model identifier selected by user/config.
+        format: Output audio format settings.
+        split_utterances: Whether the provider should split utterances.
+        version: Provider-specific model version.
+        utterances: List of utterance entries to synthesize.
+
+    Example:
+        >>> payload: VoicePayload = {"model": "octave", "format": {"type": "mp3"}, "split_utterances": True, "version": "2", "utterances": []}
+    """
+
     model: str
     format: VoiceFormat
     split_utterances: bool
@@ -45,6 +91,22 @@ VoiceResult = tuple[str, Literal["ok", "error"]]
 
 @dataclass(frozen=True)
 class VoiceSettings:
+    """
+    Runtime settings for voice synthesis.
+
+    Attributes:
+        model: User/config-selected voice model.
+        voice_name: User/config-selected voice name.
+        provider: Provider name metadata.
+        audio_format: Output audio format extension.
+        split_utterances: Whether to let the provider split utterances.
+        octave_version: Provider-specific model version.
+        max_elapsed_seconds: Optional request timeout.
+
+    Example:
+        >>> settings = VoiceSettings(model="octave", voice_name="ivan", provider="hume_ai", audio_format="mp3", split_utterances=True, octave_version="2", max_elapsed_seconds=None)
+    """
+
     model: str
     voice_name: str
     provider: str
@@ -55,9 +117,21 @@ class VoiceSettings:
 
 
 class VoiceService:
-    """Reusable voice synthesis API for cached translations."""
+    """
+    Reusable voice synthesis API for cached translations.
+
+    Example:
+        >>> service = VoiceService(provider)
+    """
 
     def __init__(self, provider: VoiceProvider, provider_settings: ProviderSettings | None = None):
+        """
+        Initialize the service with a provider implementation.
+
+        Args:
+            provider: VoiceProvider implementation.
+            provider_settings: Optional runtime settings (needed for async batch).
+        """
         self._provider = provider
         self._provider_settings = provider_settings
 
@@ -133,6 +207,12 @@ class VoiceService:
                 payload = self._provider.build_payload(text, settings=settings)
 
                 async def coro(payload=payload, out_path=out_path):
+                    """
+                    Synthesize a single utterance and return the output path.
+
+                    Returns:
+                        Path to the synthesized audio file.
+                    """
                     return await self.synthesize_once(
                         client=client,
                         headers=headers,
@@ -144,15 +224,37 @@ class VoiceService:
                 work_items.append((key, coro))
 
             def success_cb(spec: TaskSpec, _result: Path) -> None:
+                """
+                Record a successful voice synthesis.
+
+                Args:
+                    spec: TaskSpec identifying the utterance.
+                    _result: Output path of the synthesized audio.
+                """
                 results.append((spec.task_id, "ok"))
                 summary.record_success(spec.task_id)
 
             def failure_cb(spec: TaskSpec, exc: BaseException) -> None:
+                """
+                Record a failed voice synthesis.
+
+                Args:
+                    spec: TaskSpec identifying the utterance.
+                    exc: Exception raised by the provider call.
+                """
                 logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
                 results.append((spec.task_id, "error"))
                 summary.record_failure(spec.task_id, exc)
 
             def retry_cb(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
+                """
+                Log retry events for voice synthesis.
+
+                Args:
+                    spec: TaskSpec identifying the utterance.
+                    attempt: Current attempt number.
+                    sleep_for: Seconds to wait before retrying.
+                """
                 log_retry(
                     "voice",
                     spec.task_id,

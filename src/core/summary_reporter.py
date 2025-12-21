@@ -13,6 +13,10 @@ class SummaryReporter:
 
     Tracks successes, failures, skips, and other status counts during
     translation or voice generation tasks.
+
+    Example:
+        >>> reporter = SummaryReporter("translate")
+        >>> reporter.record_translation("translated", "chp1_hello")
     """
 
     name: str
@@ -46,15 +50,34 @@ class SummaryReporter:
             self.failures.append(task_id)
 
     def record_success(self, task_id: str | None) -> None:
+        """
+        Record a successful task by ID.
+
+        Args:
+            task_id: Task identifier, if available.
+        """
         self.successes += 1
         if task_id:
             self.successes_list.append(task_id)
 
     def record_failure(self, task_id: str | None, _exc: BaseException | None = None) -> None:
+        """
+        Record a failed task by ID.
+
+        Args:
+            task_id: Task identifier, if available.
+            _exc: Exception that caused the failure (unused).
+        """
         if task_id:
             self.failures.append(task_id)
 
     def log_translation(self, output_path: str | None = None) -> None:
+        """
+        Log a summary of translation results.
+
+        Args:
+            output_path: Optional path to the output file for user visibility.
+        """
         logger.success(
             f"[{self.name.upper()}] Done. translated={self.successes} skipped={self.skipped} "
             f"loaded={self.loaded} ignored={self.ignored} empty={self.empty} "
@@ -66,6 +89,14 @@ class SummaryReporter:
             logger.success(f"[{self.name.upper()}] Output saved to: {output_path}")
 
     def log_voice(self, successes: Iterable[str], failures: Iterable[str], skipped: int) -> None:
+        """
+        Log a summary of voice generation results.
+
+        Args:
+            successes: Iterable of successful keys.
+            failures: Iterable of failed keys.
+            skipped: Count of skipped keys.
+        """
         success_count = len(list(successes))
         failure_list = list(failures)
         logger.info(

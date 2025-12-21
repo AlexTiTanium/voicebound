@@ -26,6 +26,18 @@ from utils.command_utils import (
 
 
 class VoiceSummary(TypedDict):
+    """
+    Summary of voice generation outcomes.
+
+    Attributes:
+        successes: Keys that successfully generated audio.
+        failures: Keys that failed voice generation.
+        skipped: Count of items skipped because output already existed.
+
+    Example:
+        >>> summary: VoiceSummary = {"successes": ["chp1_hello"], "failures": [], "skipped": 2}
+    """
+
     successes: list[str]
     failures: list[str]
     skipped: int
@@ -183,6 +195,27 @@ async def _run_voice_async(
     summary: SummaryReporter,
     skipped_count: int,
 ) -> list[VoiceResult]:
+    """
+    Build VoiceSettings and run the async voice service.
+
+    Args:
+        worklist: List of (key, text) pairs to synthesize.
+        output_dir: Directory to write audio files to.
+        audio_format: Audio format extension for output files.
+        model: Provider model identifier (user/config supplied).
+        voice_name: Provider voice name (user/config supplied).
+        provider: Provider name metadata (user/config supplied).
+        split_utterances: Whether to let the API split utterances.
+        octave_version: Provider-specific voice model version.
+        max_elapsed_seconds: Optional per-request timeout.
+        api_provider: Provider implementation instance.
+        provider_settings: API key, model, RPM, and retry settings.
+        summary: SummaryReporter used to collect counts.
+        skipped_count: Number of keys skipped before processing.
+
+    Returns:
+        A list of (key, status) tuples.
+    """
     voice_settings = VoiceSettings(
         model=model,
         voice_name=voice_name,

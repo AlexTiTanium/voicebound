@@ -12,7 +12,12 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class TranslationProviderInfo:
-    """Metadata and factory for a translation provider."""
+    """
+    Metadata and factory for a translation provider.
+
+    Example:
+        >>> info = get_translation_provider_info("openai")
+    """
 
     key: str
     name: str
@@ -23,7 +28,12 @@ class TranslationProviderInfo:
 
 @dataclass(frozen=True)
 class VoiceProviderInfo:
-    """Metadata and factory for a voice provider."""
+    """
+    Metadata and factory for a voice provider.
+
+    Example:
+        >>> info = get_voice_provider_info("hume_ai")
+    """
 
     key: str
     name: str
@@ -62,6 +72,15 @@ _ALIASES: dict[str, str] = {
 
 
 def _normalize(name: str | None) -> str:
+    """
+    Normalize provider names for lookup.
+
+    Args:
+        name: User-supplied provider name or alias.
+
+    Returns:
+        Normalized lowercase name or empty string.
+    """
     if not name:
         return ""
     return name.strip().lower()

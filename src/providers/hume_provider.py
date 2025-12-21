@@ -18,6 +18,9 @@ class HumeVoiceProvider:
     Hume AI voice provider implementation.
 
     Handles interaction with the Hume AI TTS API.
+
+    Example:
+        >>> provider = HumeVoiceProvider()
     """
 
     key: str = "hume_ai"

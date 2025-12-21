@@ -18,6 +18,18 @@ T = TypeVar("T")
 
 @dataclass
 class CommandContext:
+    """
+    Container for shared command configuration and provider settings.
+
+    Attributes:
+        config: Loaded configuration dictionary (user/config supplied).
+        provider: ProviderSettings resolved from config.
+        logger: Logger instance used by commands.
+
+    Example:
+        >>> ctx = CommandContext(config={}, provider=ProviderSettings(api_key="sk-...", model="gpt-5-nano", rpm=60, concurrency=4, retry=RetryConfig()))
+    """
+
     config: dict
     provider: ProviderSettings
     logger: Any = logger
@@ -66,6 +78,7 @@ def build_tasks(worklist: Iterable[tuple[str, Callable[[], Awaitable[T]]]]) -> l
     for key, coro_factory in worklist:
 
         async def wrapper(fn=coro_factory):
+            """Invoke the task coroutine factory and await its result."""
             return await fn()
 
         specs.append(TaskSpec(task_id=key, coro_factory=wrapper))
@@ -101,6 +114,13 @@ async def run_with_progress(
     progress = ProgressReporter(f"[{name.upper()}] Processing", total=total)
 
     async def hook_success(spec: TaskSpec[T], result: T):
+        """
+        Handle a successful task completion.
+
+        Args:
+            spec: Task specification that completed.
+            result: Result value produced by the task.
+        """
         if success_cb:
             success_cb(spec, result)
         else:
@@ -109,6 +129,13 @@ async def run_with_progress(
         return result
 
     async def hook_failure(spec: TaskSpec[T], exc: BaseException):
+        """
+        Handle a failed task and update progress.
+
+        Args:
+            spec: Task specification that failed.
+            exc: Exception raised by the task.
+        """
         if failure_cb:
             failure_cb(spec, exc)
         else:
@@ -116,6 +143,14 @@ async def run_with_progress(
         progress.advance()
 
     def retry_hook(spec: TaskSpec[T], attempt: int, sleep_for: float | None) -> None:
+        """
+        Log or delegate retry events.
+
+        Args:
+            spec: Task specification being retried.
+            attempt: Current attempt count.
+            sleep_for: Seconds to wait before retrying.
+        """
         if retry_cb:
             retry_cb(spec, attempt, sleep_for)
         else:

@@ -11,6 +11,9 @@ class OpenAITranslationProvider:
     OpenAI translation provider implementation.
 
     Uses OpenAI's Chat Completions API to translate text.
+
+    Example:
+        >>> provider = OpenAITranslationProvider(api_key="sk-...")
     """
 
     api_key: str

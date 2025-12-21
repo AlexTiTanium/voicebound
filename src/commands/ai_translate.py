@@ -28,6 +28,21 @@ from utils.command_utils import load_progress, load_provider_settings, load_stri
 
 
 class Summary(TypedDict):
+    """
+    Aggregate counts for translation outcomes.
+
+    Attributes:
+        translated: Count of successfully translated strings.
+        skipped: Count of strings skipped due to filters.
+        loaded: Count of strings loaded from cache.
+        ignored: Count of strings ignored by regex.
+        empty: Count of empty strings.
+        errors: List of keys that failed translation.
+
+    Example:
+        >>> summary: Summary = {"translated": 3, "skipped": 1, "loaded": 2, "ignored": 0, "empty": 0, "errors": []}
+    """
+
     translated: int
     skipped: int
     loaded: int
@@ -168,6 +183,12 @@ def translate_strings(
                 summary.record_translation(status, name)
 
         async def _run_translate() -> list[TranslationResult]:
+            """
+            Execute the async translation task runner.
+
+            Returns:
+                A list of TranslationResult tuples from the provider tasks.
+            """
             return await service.translate_nodes_async(
                 translate_nodes,
                 filters=translation_filters,
