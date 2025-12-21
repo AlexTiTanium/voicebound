@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import functools
 import re
 from dataclasses import dataclass
 from html import unescape
@@ -367,7 +366,9 @@ class TranslationService:
                     encoding=encoding,
                 )
 
-            def make_coro(fn: Callable[[], TranslationResult]) -> Callable[[], Awaitable[TranslationResult]]:
+            def make_coro(
+                fn: Callable[[], TranslationResult],
+            ) -> Callable[[], Awaitable[TranslationResult]]:
                 async def coro() -> TranslationResult:
                     """
                     Run the synchronous node translation in a worker thread.

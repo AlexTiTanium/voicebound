@@ -336,6 +336,28 @@ def test_translate_nodes_async_dry_run_uses_distinct_nodes(tmp_path):
     assert all(isinstance(status, tuple) and status[0] == "dry-run" for _, _, status in results)
 
 
+def test_prepare_nodes_skips_duplicate_keys():
+    service = translation_api.TranslationService(DummyProvider("Hola"), None)
+    first = ET.Element("string", {"name": "dup_key"})
+    first.text = "First"
+    second = ET.Element("string", {"name": "dup_key"})
+    second.text = "Second"
+
+    filters = TranslationFilters(
+        allowed_pattern=re.compile(r"^dup_"),
+        ignore_pattern=re.compile(r"^$"),
+    )
+    pre_results, translate_nodes = service.prepare_nodes(
+        [first, second],
+        filters=filters,
+        done={},
+    )
+
+    assert pre_results == []
+    assert len(translate_nodes) == 1
+    assert translate_nodes[0].text == "First"
+
+
 def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     config_path = write_config(tmp_path)
     write_strings(tmp_path)
