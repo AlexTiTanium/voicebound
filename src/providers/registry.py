@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class TranslationProviderInfo:
+    """Metadata and factory for a translation provider."""
+
     key: str
     name: str
     default_model: str
@@ -21,6 +23,8 @@ class TranslationProviderInfo:
 
 @dataclass(frozen=True)
 class VoiceProviderInfo:
+    """Metadata and factory for a voice provider."""
+
     key: str
     name: str
     default_model: str
@@ -64,12 +68,30 @@ def _normalize(name: str | None) -> str:
 
 
 def get_translation_provider_info(name: str | None) -> TranslationProviderInfo | None:
+    """
+    Retrieve translation provider metadata by name or alias.
+
+    Args:
+        name: The provider name (e.g., "openai", "open_ai").
+
+    Returns:
+        TranslationProviderInfo if found, else None.
+    """
     normalized = _normalize(name)
     lookup = _ALIASES.get(normalized, normalized)
     return _TRANSLATION_PROVIDERS.get(lookup)
 
 
 def get_voice_provider_info(name: str | None) -> VoiceProviderInfo | None:
+    """
+    Retrieve voice provider metadata by name or alias.
+
+    Args:
+        name: The provider name (e.g., "hume_ai", "hume").
+
+    Returns:
+        VoiceProviderInfo if found, else None.
+    """
     normalized = _normalize(name)
     lookup = _ALIASES.get(normalized, normalized)
     return _VOICE_PROVIDERS.get(lookup)

@@ -52,7 +52,32 @@ def translate_strings(
     log_level: str | None = None,
     color: bool = True,
 ) -> None:
-    """Translate strings.xml using configured provider according to config and CLI overrides."""
+    """
+    Translate strings.xml using configured provider according to config and CLI overrides.
+
+    Orchestrates the translation process:
+    1. Loads configuration and provider settings.
+    2. Parses the input XML file.
+    3. Filters strings based on regex patterns.
+    4. Checks against cached progress.
+    5. Executes translation tasks concurrently.
+    6. Updates the XML file and progress cache.
+
+    Args:
+        input_file: Path to the input strings.xml file.
+        output_file: Path to save the translated XML file.
+        progress_file: Path to the progress JSON cache file.
+        allowed_regex: Regex to select keys for translation.
+        ignore_regex: Regex to exclude keys from translation.
+        dry_run: If True, simulate the process without API calls.
+        max_workers: Number of concurrent workers.
+        model: Model identifier to use.
+        count_tokens_enabled: Whether to count tokens (requires tiktoken).
+        target_language: Target language for translation.
+        config_path: Path to the configuration file.
+        log_level: Logging verbosity.
+        color: Enable colored logging.
+    """
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     translate_cfg = config.get("translate", {})
@@ -221,6 +246,15 @@ def typer_command(
 
 
 def _summarize_results(results: Iterable[TranslationResult]) -> Summary:
+    """
+    Aggregate translation results into a summary dictionary.
+
+    Args:
+        results: Iterable of translation results.
+
+    Returns:
+        A Summary dictionary containing counts and error lists.
+    """
     summary: Summary = {
         "translated": 0,
         "skipped": 0,

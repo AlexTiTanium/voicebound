@@ -46,7 +46,29 @@ def generate_voice(
     color: bool = True,
     max_elapsed_seconds: float | None = None,
 ) -> None:
-    """Generate voice files from cached translations using configured provider."""
+    """
+    Generate voice files from cached translations using configured provider.
+
+    Orchestrates the voice generation process:
+    1. Loads configuration and provider settings.
+    2. Loads the progress cache (translated strings).
+    3. Filters items based on regex and existing files.
+    4. Executes voice synthesis tasks concurrently.
+
+    Args:
+        input_file: Path to the progress JSON file (source of text).
+        output_dir: Directory to save generated audio files.
+        target_language: Target language (metadata only).
+        allowed_regex: Regex to select keys for generation.
+        ignore_regex: Regex to exclude keys from generation.
+        stop_after: Stop after processing N items.
+        audio_format: Audio format extension (e.g., "mp3").
+        provider: Voice provider identifier.
+        config_path: Path to the configuration file.
+        log_level: Logging verbosity.
+        color: Enable colored logging.
+        max_elapsed_seconds: Timeout for each generation request.
+    """
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     voice_cfg = config.get("voice", {})

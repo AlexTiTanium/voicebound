@@ -27,7 +27,13 @@ T = TypeVar("T")
 
 
 def configure_logging(level: str | None = None, *, color: bool = True) -> None:
-    """Configure loguru to log to stderr once per process (keeps stdout clean for progress)."""
+    """
+    Configure loguru to log to stderr once per process (keeps stdout clean for progress).
+
+    Args:
+        level: Logging level (e.g., "INFO", "DEBUG").
+        color: Whether to enable colored output.
+    """
     log_level_str: str = level or os.getenv("VOICEBOUND_LOG_LEVEL") or "INFO"
     warnings.filterwarnings(
         "ignore",
@@ -44,7 +50,18 @@ def configure_logging(level: str | None = None, *, color: bool = True) -> None:
 
 
 def resolve_config_path(config_path: Path | None = None) -> Path:
-    """Resolve config path with precedence: explicit > env > local > XDG."""
+    """
+    Resolve config path with precedence: explicit > env > local > XDG.
+
+    Args:
+        config_path: Explicitly provided path.
+
+    Returns:
+        The resolved Path object.
+
+    Raises:
+        SystemExit: If no configuration file is found.
+    """
     env_path = os.getenv("VOICEBOUND_CONFIG")
     candidates = [
         Path(config_path) if config_path else None,
@@ -61,7 +78,18 @@ def resolve_config_path(config_path: Path | None = None) -> Path:
 
 
 def load_config(config_path: Path | None = None) -> dict[str, Any]:
-    """Load full config file with validation."""
+    """
+    Load full config file with validation.
+
+    Args:
+        config_path: Optional explicit path to config file.
+
+    Returns:
+        A dictionary containing the configuration.
+
+    Raises:
+        SystemExit: If the config file is missing or invalid.
+    """
     if config_path is not None:
         if not config_path.exists():
             raise SystemExit(f"Missing config file: {config_path}.")
@@ -74,7 +102,16 @@ def load_config(config_path: Path | None = None) -> dict[str, Any]:
 
 
 def validate_config(config: dict[str, Any], path: Path) -> None:
-    """Ensure required sections/keys exist and are non-empty."""
+    """
+    Ensure required sections/keys exist and are non-empty.
+
+    Args:
+        config: The configuration dictionary.
+        path: Path to the config file (for error messages).
+
+    Raises:
+        SystemExit: If required keys are missing.
+    """
     missing: list[str] = []
     for section, keys in REQUIRED_CONFIG.items():
         section_data = config.get(section, {})
@@ -93,7 +130,22 @@ def get_config_value(
     required: bool = True,
     default: Any = None,
 ) -> Any:
-    """Fetch a value from config with optional default and required enforcement."""
+    """
+    Fetch a value from config with optional default and required enforcement.
+
+    Args:
+        config: The configuration dictionary.
+        section: The section name (e.g., "openai").
+        key: The key within the section (e.g., "api_key").
+        required: If True, raises SystemExit if value is missing/empty.
+        default: Default value if key is missing.
+
+    Returns:
+        The configuration value.
+
+    Raises:
+        SystemExit: If required is True and value is missing.
+    """
     value = config.get(section, {}).get(key, default)
     if required and (value is None or value == ""):
         raise SystemExit(f"Set [{section}].{key} in config.toml.")
@@ -101,12 +153,28 @@ def get_config_value(
 
 
 def ensure_directory(path: Path) -> None:
-    """Create directory if it does not exist."""
+    """
+    Create directory if it does not exist.
+
+    Args:
+        path: Path to the directory.
+    """
     path.mkdir(parents=True, exist_ok=True)
 
 
 def load_json(path: Path, default: T | None = None) -> T | None:
-    """Load JSON content or return default when file is missing."""
+    """
+    Load JSON content or return default when file is missing.
+
+    Handles trailing commas by attempting a regex repair if standard parsing fails.
+
+    Args:
+        path: Path to the JSON file.
+        default: Default value if file is missing or unparseable.
+
+    Returns:
+        The parsed JSON data or the default value.
+    """
     if not path.exists():
         return default
     try:
@@ -129,7 +197,15 @@ def load_json(path: Path, default: T | None = None) -> T | None:
 
 
 def write_json(path: Path, data: Any) -> None:
-    """Persist JSON data with UTF-8 encoding."""
+    """
+    Persist JSON data with UTF-8 encoding.
+
+    Writes to a temporary file first, then renames it to ensure atomicity.
+
+    Args:
+        path: Path to the JSON file.
+        data: Data to serialize.
+    """
     ensure_directory(path.parent)
     tmp_path = path.with_name(f"{path.name}.tmp")
     try:
@@ -147,11 +223,18 @@ class RateLimiter:
     """Thread-safe rate limiter that enforces a minimum delay between calls."""
 
     def __init__(self, min_interval: float):
+        """
+        Initialize the rate limiter.
+
+        Args:
+            min_interval: Minimum seconds between calls.
+        """
         self.min_interval = min_interval
         self._lock = Lock()
         self._last: float | None = None
 
     def wait(self) -> None:
+        """Block until the minimum interval has passed since the last call."""
         with self._lock:
             now = time.perf_counter()
             if self._last is not None:
@@ -164,13 +247,34 @@ class RateLimiter:
 
 
 def resolve_path(path_value: str | Path, base: Path = PROJECT_ROOT) -> Path:
-    """Resolve paths relative to project root when not absolute."""
+    """
+    Resolve paths relative to project root when not absolute.
+
+    Args:
+        path_value: The path string or Path object.
+        base: The base directory to resolve against (default: PROJECT_ROOT).
+
+    Returns:
+        The resolved absolute Path.
+    """
     path = Path(path_value)
     return path if path.is_absolute() else (base / path)
 
 
 def compile_regex(pattern: str, *, label: str) -> re.Pattern[str]:
-    """Compile regex with a clear error if invalid."""
+    """
+    Compile regex with a clear error if invalid.
+
+    Args:
+        pattern: The regex pattern string.
+        label: Label for the pattern (e.g., "allowed", "ignore") for error messages.
+
+    Returns:
+        The compiled regex pattern object.
+
+    Raises:
+        SystemExit: If the regex pattern is invalid.
+    """
     try:
         return re.compile(pattern)
     except re.error as exc:

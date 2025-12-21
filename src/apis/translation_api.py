@@ -77,7 +77,21 @@ class TranslationService:
         self._provider_settings = provider_settings
 
     def translate_text(self, text: str, model: str, target_language: str) -> str:
-        """Call the provider translate API to translate text."""
+        """
+        Call the provider translate API to translate text.
+
+        Args:
+            text: The text to translate.
+            model: The model identifier to use.
+            target_language: The target language (e.g., "Russian").
+
+        Returns:
+            The translated text string.
+
+        Example:
+            >>> service.translate_text("Hello", "gpt-4o", "Spanish")
+            'Hola'
+        """
         return self._provider.translate_text(text, model, target_language)
 
     def prepare_nodes(
@@ -87,6 +101,23 @@ class TranslationService:
         filters: TranslationFilters,
         done: dict[str, str | None],
     ) -> tuple[list[TranslationResult], list[Element]]:
+        """
+        Filter and prepare XML nodes for translation.
+
+        Identifies which nodes need translation, which are already done (cached),
+        and which should be ignored or skipped based on filters.
+
+        Args:
+            nodes: Iterable of XML Element objects (e.g. <string name="...">...</string>).
+            filters: Regex patterns for allowing/ignoring keys.
+            done: Dictionary of already translated keys (cache).
+
+        Returns:
+            A tuple containing:
+            1. A list of `TranslationResult` tuples for items that don't need API calls
+               (ignored, empty, loaded from cache, skipped).
+            2. A list of `Element` objects that require translation.
+        """
         pre_results: list[TranslationResult] = []
         translate_nodes: list[Element] = []
         for node in nodes:
@@ -115,7 +146,16 @@ class TranslationService:
         return pre_results, translate_nodes
 
     def apply_translations(self, root: Element, results: Iterable[TranslationResult]) -> None:
-        """Apply translated text back to the XML tree for eligible entries."""
+        """
+        Apply translated text back to the XML tree for eligible entries.
+
+        Updates the text content of <string> elements in the XML tree with the
+        translated values from the results.
+
+        Args:
+            root: The root XML Element of the strings file.
+            results: Iterable of TranslationResult tuples containing (name, text, status).
+        """
         for name, text, status in results:
             if status in ("translated", "loaded", "skipped"):
                 text = clean_text(text)
@@ -187,7 +227,22 @@ class TranslationService:
         settings: TranslationSettings,
         summary: SummaryReporter,
     ) -> list[TranslationResult]:
-        """Drive TaskRunner for translation tasks."""
+        """
+        Drive TaskRunner for translation tasks.
+
+        Orchestrates the concurrent translation of multiple XML nodes using the
+        configured provider, respecting rate limits and concurrency settings.
+
+        Args:
+            nodes: List of XML Element objects to translate.
+            filters: Filters to apply (though usually pre-filtered).
+            progress: Progress tracking object.
+            settings: Translation settings (model, language, etc.).
+            summary: Reporter for collecting statistics.
+
+        Returns:
+            A list of TranslationResult tuples.
+        """
         results: list[TranslationResult] = []
         if self._provider_settings is None:
             raise ValueError("provider_settings is required for translate_nodes_async.")
@@ -255,7 +310,32 @@ def process_string(
     encoding: TokenEncoder | None,
     target_language: str,
 ) -> TranslationResult:
-    """Translate one string node with caching, filters, and progress updates."""
+    """
+    Translate one string node with caching, filters, and progress updates.
+
+    This is a standalone helper that instantiates a TranslationService to process
+    a single node. It handles:
+    1. Checking filters (allowed/ignored regex).
+    2. Checking cache (done dict).
+    3. Calling the provider if needed.
+    4. Updating the progress file.
+
+    Args:
+        node: The XML Element to process.
+        translate_pattern: Regex for allowed keys.
+        ignore_pattern: Regex for ignored keys.
+        done: Dictionary of completed translations.
+        progress_lock: Lock for thread-safe progress updates.
+        provider: The translation provider instance.
+        progress_file: Path to the progress JSON file.
+        model: Model identifier.
+        dry_run: If True, skips actual API calls.
+        encoding: Token encoder for counting tokens (optional).
+        target_language: Target language.
+
+    Returns:
+        A TranslationResult tuple (name, text, status).
+    """
     filters = TranslationFilters(
         allowed_pattern=translate_pattern,
         ignore_pattern=ignore_pattern,

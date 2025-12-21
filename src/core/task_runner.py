@@ -69,6 +69,15 @@ class TaskRunner(Generic[T]):
         self._semaphore = anyio.Semaphore(config.concurrency)
 
     async def run(self, tasks: Iterable[TaskSpec[T]]) -> list[TaskOutcome[T]]:
+        """
+        Execute a batch of tasks with concurrency control and rate limiting.
+
+        Args:
+            tasks: An iterable of TaskSpec objects defining the work to be done.
+
+        Returns:
+            A list of TaskOutcome objects containing results or errors for each task.
+        """
         outcomes: list[TaskOutcome[T]] = []
         lock = anyio.Lock()
 

@@ -8,6 +8,13 @@ from loguru import logger
 
 @dataclass
 class SummaryReporter:
+    """
+    Collects and reports statistics for batch operations.
+
+    Tracks successes, failures, skips, and other status counts during
+    translation or voice generation tasks.
+    """
+
     name: str
     successes: int = 0
     successes_list: list[str] = field(default_factory=list)
@@ -18,6 +25,13 @@ class SummaryReporter:
     empty: int = 0
 
     def record_translation(self, status: str, task_id: str | None) -> None:
+        """
+        Record the outcome of a translation task.
+
+        Args:
+            status: One of "translated", "skipped", "loaded", "ignored", "empty", "error".
+            task_id: The identifier of the task (e.g., string name).
+        """
         if status == "translated":
             self.successes += 1
         elif status == "skipped":

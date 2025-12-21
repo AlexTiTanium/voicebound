@@ -33,6 +33,21 @@ def make_command_context(
     log_level: str | None = None,
     color: bool = True,
 ) -> CommandContext:
+    """
+    Initialize command context with configuration and logging.
+
+    Args:
+        config_path: Path to the configuration file.
+        provider_key: Key for the provider in the config (e.g., "openai").
+        default_model: Default model to use if not specified in config.
+        default_rpm: Default requests per minute.
+        concurrency_override: Optional override for concurrency.
+        log_level: Logging level (e.g., "INFO", "DEBUG").
+        color: Whether to enable colored logging.
+
+    Returns:
+        A CommandContext object containing the loaded config and provider settings.
+    """
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     provider = load_provider_settings(
@@ -67,6 +82,22 @@ async def run_with_progress(
     failure_cb: Callable[[TaskSpec[T], BaseException], None] | None = None,
     retry_cb: Callable[[TaskSpec[T], int, float | None], None] | None = None,
 ) -> SummaryReporter:
+    """
+    Run a batch of tasks with a progress bar and reporting hooks.
+
+    Args:
+        name: Name of the operation (for the progress bar).
+        total: Total number of tasks.
+        runner: The TaskRunner instance to use.
+        specs: List of TaskSpec objects.
+        summary: SummaryReporter to update.
+        success_cb: Optional callback for success.
+        failure_cb: Optional callback for failure.
+        retry_cb: Optional callback for retries.
+
+    Returns:
+        The updated SummaryReporter.
+    """
     progress = ProgressReporter(f"[{name.upper()}] Processing", total=total)
 
     async def hook_success(spec: TaskSpec[T], result: T):

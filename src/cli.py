@@ -49,6 +49,12 @@ def main(
     ctx.obj["config_path"] = config_path
     ctx.obj["log_level"] = log_level
     ctx.obj["color"] = not no_color
+    """
+    VoiceBound: AI-powered translation and voice generation tool.
+
+    This is the main entry point for the CLI. It handles global options like
+    configuration path and logging level.
+    """
     if ctx.invoked_subcommand is None:
         typer.echo(ctx.get_help())
         raise typer.Exit()

@@ -14,6 +14,12 @@ API_URL = "https://api.hume.ai/v0/tts/file"
 
 @dataclass(frozen=True)
 class HumeVoiceProvider:
+    """
+    Hume AI voice provider implementation.
+
+    Handles interaction with the Hume AI TTS API.
+    """
+
     key: str = "hume_ai"
     name: str = "hume_ai"
     default_model: str = "octave"
@@ -21,12 +27,14 @@ class HumeVoiceProvider:
     api_url: str = API_URL
 
     def build_headers(self, settings: ProviderSettings) -> dict[str, str]:
+        """Build headers including the API key."""
         return {
             "Content-Type": "application/json",
             "X-Hume-Api-Key": settings.api_key,
         }
 
     def build_payload(self, text: str, *, settings: VoiceSettings) -> VoicePayload:
+        """Construct the JSON payload for Hume API."""
         return {
             "model": settings.model,
             "format": {"type": settings.audio_format},
@@ -46,4 +54,5 @@ class HumeVoiceProvider:
         headers: dict[str, str],
         payload: VoicePayload,
     ) -> httpx.Response:
+        """Send POST request to Hume API."""
         return await client.post(self.api_url, headers=headers, json=payload, timeout=120)

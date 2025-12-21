@@ -48,7 +48,16 @@ class ProviderSettings:
 
 
 def derive_concurrency(rpm: int, override: int | None = None) -> int:
-    """Compute a reasonable concurrency to approach the rpm target."""
+    """
+    Compute a reasonable concurrency to approach the rpm target.
+
+    Args:
+        rpm: Requests per minute target.
+        override: Optional manual concurrency override.
+
+    Returns:
+        An integer representing the number of concurrent workers.
+    """
     if override:
         return max(1, int(override))
     cpus = os.cpu_count() or 4
@@ -74,6 +83,19 @@ def load_provider_settings(
     default_rpm: int,
     concurrency_override: int | None = None,
 ) -> ProviderSettings:
+    """
+    Load and validate provider settings from configuration.
+
+    Args:
+        config: The full configuration dictionary.
+        provider_key: The key for the provider in the config.
+        default_model: Default model if not specified.
+        default_rpm: Default RPM if not specified.
+        concurrency_override: Optional concurrency override.
+
+    Returns:
+        A ProviderSettings object.
+    """
     provider_cfg = config.get(provider_key, {})
     api_key = get_config_value(config, provider_key, "api_key")
     model = get_config_value(config, provider_key, "model", required=False, default=default_model)
@@ -90,6 +112,17 @@ def load_provider_settings(
 
 
 def build_runner(name: str, settings: ProviderSettings, hooks: TaskHooks[T]) -> TaskRunner[T]:
+    """
+    Create a configured TaskRunner instance.
+
+    Args:
+        name: Name of the runner (for logging).
+        settings: Provider settings (RPM, concurrency, retry).
+        hooks: Task hooks for success/failure/retry.
+
+    Returns:
+        A configured TaskRunner.
+    """
     runner_cfg = RunnerConfig(
         name=name,
         rpm=settings.rpm,
@@ -102,6 +135,15 @@ def build_runner(name: str, settings: ProviderSettings, hooks: TaskHooks[T]) -> 
 def build_task_specs(
     worklist: Iterable[tuple[str, Callable[[], Awaitable[T]]]],
 ) -> list[TaskSpec[T]]:
+    """
+    Convert a list of (id, coroutine_factory) tuples into TaskSpec objects.
+
+    Args:
+        worklist: Iterable of (task_id, coro_factory) tuples.
+
+    Returns:
+        A list of TaskSpec objects ready for the TaskRunner.
+    """
     specs: list[TaskSpec[T]] = []
     for task_id, coro_factory in worklist:
 
@@ -114,6 +156,12 @@ def build_task_specs(
 
 @dataclass
 class OutcomeCollector:
+    """
+    Collects success and failure IDs from task execution.
+
+    Useful for simple reporting where full TaskOutcome objects are not needed.
+    """
+
     name: str
     successes: list[str] = field(default_factory=list)
     failures: list[str] = field(default_factory=list)
@@ -129,6 +177,12 @@ class OutcomeCollector:
 
 @dataclass
 class RunnerCallbacks:
+    """
+    Container for task runner callbacks.
+
+    Holds functions to be called on success, failure, and retry events.
+    """
+
     on_success: Callable[[TaskSpec[Any], Any], None] | None = None
     on_failure: Callable[[TaskSpec[Any], BaseException], None] | None = None
     on_retry: Callable[[TaskSpec[Any], int, float | None], None] | None = None
@@ -137,11 +191,33 @@ class RunnerCallbacks:
 def log_retry(
     command: str, task_id: str, attempt: int, total: int, sleep_for: float | None
 ) -> None:
+    """
+    Log a retry attempt with standard formatting.
+
+    Args:
+        command: The command name (e.g., "translate").
+        task_id: The ID of the task being retried.
+        attempt: The current attempt number.
+        total: Total allowed attempts.
+        sleep_for: Seconds to sleep before next attempt.
+    """
     sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
     logger.warning(f"[{command.upper()}] {task_id} retry {attempt}/{total} (sleep {sleep_desc})")
 
 
 def load_strings(path: Path) -> tuple[ElementTreeT, ET.Element]:
+    """
+    Parse an XML file and return the tree and root element.
+
+    Args:
+        path: Path to the XML file.
+
+    Returns:
+        A tuple of (ElementTree, RootElement).
+
+    Raises:
+        ValueError: If the XML root is missing.
+    """
     tree = cast(ElementTreeT, ET.parse(path))
     root = tree.getroot()
     if root is None:
@@ -150,10 +226,27 @@ def load_strings(path: Path) -> tuple[ElementTreeT, ET.Element]:
 
 
 def persist_progress(path: Path, data: Any) -> None:
+    """
+    Save progress data to a JSON file.
+
+    Args:
+        path: Path to the JSON file.
+        data: Data to serialize.
+    """
     write_json(path, data)
 
 
 def load_progress(path: Path, default: T | None = None) -> T | None:
+    """
+    Load progress data from a JSON file.
+
+    Args:
+        path: Path to the JSON file.
+        default: Default value if file doesn't exist or is invalid.
+
+    Returns:
+        The loaded data or the default value.
+    """
     return load_json(path, default=default)
 
 
@@ -166,6 +259,21 @@ def build_voice_worklist(
     output_dir: Path,
     audio_format: str,
 ) -> list[tuple[str, str]]:
+    """
+    Filter translation progress to create a worklist for voice generation.
+
+    Args:
+        progress: Dictionary of translated strings.
+        allowed_pattern: Regex for allowed keys.
+        ignore_pattern: Regex for ignored keys.
+        existing_outputs: Set of keys that already have audio files.
+        stop_after: Max number of items to process.
+        output_dir: Directory to check for existing files.
+        audio_format: Audio file extension.
+
+    Returns:
+        A list of (key, text) tuples to process.
+    """
     worklist: list[tuple[str, str]] = []
     for key, text in progress.items():
         if text is None:
@@ -189,6 +297,13 @@ class ProgressReporter:
     """Unified progress reporter wrapping rich.Progress; safe to use as context manager."""
 
     def __init__(self, description: str, total: int):
+        """
+        Initialize the progress reporter.
+
+        Args:
+            description: Text description of the task.
+            total: Total number of steps.
+        """
         self.description = description
         self.total = total
         self._progress = Progress(

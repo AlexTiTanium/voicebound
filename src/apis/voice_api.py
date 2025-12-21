@@ -70,7 +70,23 @@ class VoiceService:
         out_path: Path,
         max_elapsed_seconds: float | None,
     ) -> Path:
-        """Send one synthesis request and persist the audio file."""
+        """
+        Send one synthesis request and persist the audio file.
+
+        Args:
+            client: The HTTP client to use.
+            headers: Headers for the request.
+            payload: The JSON payload for the request.
+            out_path: The path to save the audio file to.
+            max_elapsed_seconds: Timeout for the request.
+
+        Returns:
+            The path to the saved audio file.
+
+        Raises:
+            RuntimeError: If the API returns a non-200 status code.
+            TimeoutError: If the request takes longer than max_elapsed_seconds.
+        """
         start = time.perf_counter()
         response = await self._provider.send_request(client, headers, payload)
         if response.status_code != 200:
@@ -89,7 +105,21 @@ class VoiceService:
         summary: SummaryReporter,
         skipped_count: int,
     ) -> list[VoiceResult]:
-        """Execute voice synthesis tasks via TaskRunner."""
+        """
+        Execute voice synthesis tasks via TaskRunner.
+
+        Orchestrates the concurrent synthesis of audio files for the given worklist.
+
+        Args:
+            worklist: List of (key, text) tuples to process.
+            output_dir: Directory to save audio files.
+            settings: Voice generation settings.
+            summary: Reporter for collecting statistics.
+            skipped_count: Number of items already skipped (for reporting).
+
+        Returns:
+            A list of VoiceResult tuples (key, status).
+        """
         provider_settings = self._provider_settings
         if provider_settings is None:
             raise ValueError("provider_settings is required for run_voice_async.")
