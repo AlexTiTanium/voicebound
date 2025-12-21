@@ -25,9 +25,10 @@ REQUIRED_CONFIG = {
 
 T = TypeVar("T")
 
+
 def configure_logging(level: str | None = None, *, color: bool = True) -> None:
     """Configure loguru to log to stderr once per process (keeps stdout clean for progress)."""
-    log_level_str: str = (level or os.getenv("VOICEBOUND_LOG_LEVEL") or "INFO")
+    log_level_str: str = level or os.getenv("VOICEBOUND_LOG_LEVEL") or "INFO"
     warnings.filterwarnings(
         "ignore",
         category=DeprecationWarning,
@@ -81,9 +82,7 @@ def validate_config(config: dict[str, Any], path: Path) -> None:
             if not section_data.get(key):
                 missing.append(f"[{section}].{key}")
     if missing:
-        raise SystemExit(
-            f"Missing required config keys in {path}: {', '.join(missing)}."
-        )
+        raise SystemExit(f"Missing required config keys in {path}: {', '.join(missing)}.")
 
 
 def get_config_value(

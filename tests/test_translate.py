@@ -9,8 +9,9 @@ import pytest
 import typer
 
 from apis import translation_api
-from apis.translation_api import OpenAIClient, TranslationResult
+from apis.translation_api import TranslationResult
 from commands import ai_translate
+from providers import openai_provider
 
 
 class DummyEncoding:
@@ -39,6 +40,18 @@ class DummyChat:
 class DummyOpenAI:
     def __init__(self, api_key: str, content: str = "Translated text"):
         self.chat = DummyChat(content)
+
+
+class DummyProvider:
+    def __init__(self, content: str):
+        self._content = content
+        self.key = "dummy"
+        self.name = "dummy"
+        self.default_model = "dummy"
+        self.default_rpm = 1
+
+    def translate_text(self, text: str, model: str, target_language: str) -> str:
+        return self._content
 
 
 class DummyCtx:
@@ -122,7 +135,9 @@ def test_translate_respects_config_and_filters(tmp_path, monkeypatch):
     write_strings(tmp_path)
 
     # Patch OpenAI client to avoid network.
-    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
 
     output_file = tmp_path / "out/values/strings.xml"
 
@@ -146,12 +161,14 @@ def test_translate_dry_run_does_not_write(monkeypatch, tmp_path):
     write_strings(tmp_path)
 
     # Force dry run via config override
-    config_text = (
-        config_path.read_text(encoding="utf-8").replace("dry_run = false", "dry_run = true")
+    config_text = config_path.read_text(encoding="utf-8").replace(
+        "dry_run = false", "dry_run = true"
     )
     config_path.write_text(config_text, encoding="utf-8")
 
-    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
 
     output_file = tmp_path / "out/values/strings.xml"
 
@@ -177,12 +194,16 @@ def test_translate_uses_cache_and_skips_api(monkeypatch, tmp_path):
 
     call_count = {"count": 0}
 
-    def _translate_text(client, text, model, target_language):
+    def _translate_text(self, text, model, target_language):
         call_count["count"] += 1
         return "Hola cached"
 
-    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
-    monkeypatch.setattr(translation_api, "translate_text", _translate_text)
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
+    monkeypatch.setattr(
+        openai_provider.OpenAITranslationProvider, "translate_text", _translate_text
+    )
 
     output_file = tmp_path / "out/values/strings.xml"
 
@@ -210,7 +231,9 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     config_path.write_text(cfg_text, encoding="utf-8")
 
     # empty node matches allowed_regex to exercise dry-run and empty handling
-    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
     with pytest.raises(SystemExit):
         ai_translate.translate_strings(
             config_path=config_path,
@@ -233,16 +256,11 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     )
 
     # call translate_text directly
-    dummy_client = DummyOpenAI("k", "Hola mundo")
-    assert (
-        translation_api.translate_text(dummy_client, "hola", "gpt-5-nano", "Spanish")
-        == "Hola mundo"
-    )
+    dummy_provider = DummyProvider("Hola mundo")
+    assert dummy_provider.translate_text("hola", "gpt-5-nano", "Spanish") == "Hola mundo"
 
     # _print_dry_run with payload
-    ai_translate._print_dry_run(
-        cast(list[TranslationResult], [("a", None, ("dry-run", 1, "p"))])
-    )
+    ai_translate._print_dry_run(cast(list[TranslationResult], [("a", None, ("dry-run", 1, "p"))]))
 
     # empty branch
     node = ET.Element("string", {"name": "empty"})
@@ -253,7 +271,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=cast(OpenAIClient, DummyOpenAI("k", "Hola")),
+        provider=DummyProvider("Hola"),
         progress_file=tmp_path / "p.json",
         model="m",
         dry_run=False,
@@ -270,7 +288,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=cast(OpenAIClient, DummyOpenAI("k", "Hola")),
+        provider=DummyProvider("Hola"),
         progress_file=tmp_path / "p2.json",
         model="m",
         dry_run=True,
@@ -287,7 +305,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=cast(OpenAIClient, DummyOpenAI("k", "Hola")),
+        provider=DummyProvider("Hola"),
         progress_file=progress_file,
         model="m",
         dry_run=False,
@@ -302,7 +320,9 @@ def test_translate_keyboard_interrupt(monkeypatch, tmp_path):
     config_path = write_config(tmp_path)
     write_strings(tmp_path)
 
-    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo"))
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
 
     async def _boom(*args, **kwargs):
         raise KeyboardInterrupt()
@@ -356,7 +376,8 @@ def test_translate_reports_errors(monkeypatch, tmp_path):
     config_path = write_config(tmp_path)
     write_strings(tmp_path)
 
-    monkeypatch.setattr(ai_translate, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola"))
+    monkeypatch.setattr(openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola"))
+
     async def _return_error(self, *args, **kwargs):
         return [("bad", None, ("error", "boom"))]
 

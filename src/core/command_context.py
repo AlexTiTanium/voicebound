@@ -15,6 +15,7 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+
 @dataclass
 class CommandContext:
     config: dict
@@ -48,6 +49,7 @@ def build_tasks(worklist: Iterable[tuple[str, Callable[[], Awaitable[T]]]]) -> l
     """Convert key→coro_factory pairs into TaskSpec list."""
     specs: list[TaskSpec[T]] = []
     for key, coro_factory in worklist:
+
         async def wrapper(fn=coro_factory):
             return await fn()
 

@@ -41,4 +41,5 @@ stop_after = 0
 max_workers = 4
 target_language = "Russian"
 provider = "HUME_AI"
+api_provider = "hume_ai"
 max_elapsed_seconds = 600

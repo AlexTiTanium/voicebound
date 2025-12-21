@@ -1,30 +1,30 @@
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, Optional, TypedDict, cast
+from typing import Iterable, Optional, TypedDict
 
 import anyio
 import typer
 from loguru import logger
-from openai import OpenAI
 
 from apis.translation_api import (
-    OpenAIClient,
     TranslationFilters,
     TranslationProgress,
     TranslationResult,
     TranslationService,
     TranslationSettings,
 )
-from core.command_context import CommandContext, make_command_context
 from core.summary_reporter import SummaryReporter
+from providers.registry import get_translation_provider_info
 from utils import (
     PROJECT_ROOT,
     compile_regex,
+    configure_logging,
     ensure_directory,
     get_config_value,
+    load_config,
     resolve_path,
 )
-from utils.command_utils import load_progress, load_strings
+from utils.command_utils import load_progress, load_provider_settings, load_strings
 
 
 class Summary(TypedDict):
@@ -52,26 +52,30 @@ def translate_strings(
     log_level: str | None = None,
     color: bool = True,
 ) -> None:
-    """Translate strings.xml using OpenAI according to config and CLI overrides."""
-    ctx: CommandContext = make_command_context(
-        config_path=config_path,
-        provider_key="openai",
-        default_model="gpt-5-nano",
-        default_rpm=60,
-        concurrency_override=max_workers,
-        log_level=log_level,
-        color=color,
-    )
-    api_key = ctx.provider.api_key
-    model = model or ctx.provider.model
-    translate_cfg = ctx.config.get("translate", {})
-    provider = get_config_value(
-        ctx.config, "translate", "provider", required=False, default="openai"
-    )
-    if str(provider).lower() != "openai":
+    """Translate strings.xml using configured provider according to config and CLI overrides."""
+    configure_logging(level=log_level, color=color)
+    config = load_config(config_path)
+    translate_cfg = config.get("translate", {})
+    provider = get_config_value(config, "translate", "provider", required=False, default="openai")
+    provider_info = get_translation_provider_info(str(provider))
+    if provider_info is None:
         logger.warning(
             f"[TRANSLATE] Provider '{provider}' is not recognized; defaulting to OpenAI client."
         )
+        provider_info = get_translation_provider_info("openai")
+    if provider_info is None:
+        raise SystemExit("[TRANSLATE] No translation providers are registered.")
+
+    provider_settings = load_provider_settings(
+        config,
+        provider_key=provider_info.key,
+        default_model=provider_info.default_model,
+        default_rpm=provider_info.default_rpm,
+        concurrency_override=max_workers,
+    )
+    api_key = provider_settings.api_key
+    model = model or provider_settings.model
+    provider_client = provider_info.factory(api_key)
 
     input_file = resolve_path(input_file or translate_cfg.get("input_file", "strings.xml"))
     output_file = resolve_path(
@@ -120,8 +124,7 @@ def translate_strings(
         progress_file=progress_file,
         progress_lock=progress_lock,
     )
-    client = cast(OpenAIClient, OpenAI(api_key=api_key))
-    service = TranslationService(client, ctx.provider)
+    service = TranslationService(provider_client, provider_settings)
     pre_results, translate_nodes = service.prepare_nodes(
         tasks,
         filters=translation_filters,
@@ -138,6 +141,7 @@ def translate_strings(
         for name, _, status in pre_results:
             if isinstance(status, str):
                 summary.record_translation(status, name)
+
         async def _run_translate() -> list[TranslationResult]:
             return await service.translate_nodes_async(
                 translate_nodes,

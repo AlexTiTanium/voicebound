@@ -7,6 +7,8 @@ from loguru import logger
 
 from apis.voice_api import VoiceResult, VoiceService, VoiceSettings
 from core.summary_reporter import SummaryReporter
+from providers.registry import get_voice_provider_info
+from providers.types import VoiceProvider
 from utils import (
     compile_regex,
     configure_logging,
@@ -44,26 +46,34 @@ def generate_voice(
     color: bool = True,
     max_elapsed_seconds: float | None = None,
 ) -> None:
-    """Generate voice files from cached translations using Hume."""
+    """Generate voice files from cached translations using configured provider."""
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     voice_cfg = config.get("voice", {})
-    hume_cfg = config.get("hume_ai", {})
+    voice_provider = provider or voice_cfg.get("provider", "HUME_AI")
+    api_provider = voice_cfg.get("api_provider") or voice_provider
+    provider_info = get_voice_provider_info(str(api_provider))
+    if provider_info is None:
+        logger.warning(f"[VOICE] Provider '{api_provider}' is not recognized; defaulting to Hume.")
+        provider_info = get_voice_provider_info("hume_ai")
+    if provider_info is None:
+        raise SystemExit("[VOICE] No voice providers are registered.")
+    provider_cfg = config.get(provider_info.key, {})
     provider_settings = load_provider_settings(
         config,
-        provider_key="hume_ai",
-        default_model="octave",
-        default_rpm=10,
+        provider_key=provider_info.key,
+        default_model=provider_info.default_model,
+        default_rpm=provider_info.default_rpm,
         concurrency_override=voice_cfg.get("max_workers"),
     )
-    api_key = provider_settings.api_key
 
     model = get_config_value(
-        config, "hume_ai", "model", required=False, default=provider_settings.model
+        config, provider_info.key, "model", required=False, default=provider_settings.model
     )
-    provider = provider or voice_cfg.get("provider", "HUME_AI")
-    voice_name = get_config_value(config, "hume_ai", "voice_name", required=False, default="ivan")
-    split_utterances = hume_cfg.get("split_utterances", True)
+    voice_name = get_config_value(
+        config, provider_info.key, "voice_name", required=False, default="ivan"
+    )
+    split_utterances = provider_cfg.get("split_utterances", True)
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
     output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
@@ -71,7 +81,7 @@ def generate_voice(
     allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
     stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after
-    octave_version = hume_cfg.get("octave_version", "2")
+    octave_version = provider_cfg.get("octave_version", "2")
     max_elapsed_seconds = (
         max_elapsed_seconds
         if max_elapsed_seconds is not None
@@ -83,13 +93,12 @@ def generate_voice(
 
     progress: dict[str, str | None] = load_progress(input_file, default={}) or {}
     ensure_directory(output_dir)
-    headers = {
-        "Content-Type": "application/json",
-        "X-Hume-Api-Key": api_key,
-    }
-    existing_outputs = {
-        path.stem for path in output_dir.glob(f"*.{audio_format}")
-    } if output_dir.exists() else set()
+    api_provider_client = provider_info.factory()
+    existing_outputs = (
+        {path.stem for path in output_dir.glob(f"*.{audio_format}")}
+        if output_dir.exists()
+        else set()
+    )
 
     logger.info(f"[VOICE] Found {len(existing_outputs)} existing outputs; skipping those keys.")
     allowed_pattern = compile_regex(allowed_regex, label="allowed")
@@ -115,15 +124,15 @@ def generate_voice(
         anyio.run(
             _run_voice_async,
             worklist,
-            headers,
             output_dir,
             audio_format,
             model,
             voice_name,
-            provider,
+            voice_provider,
             split_utterances,
             octave_version,
             max_elapsed_seconds,
+            api_provider_client,
             provider_settings,
             voice_summary,
             summary["skipped"],
@@ -139,7 +148,6 @@ def generate_voice(
 
 async def _run_voice_async(
     worklist: list[tuple[str, str]],
-    headers: dict[str, str],
     output_dir: Path,
     audio_format: str,
     model: str,
@@ -148,6 +156,7 @@ async def _run_voice_async(
     split_utterances: bool,
     octave_version: str,
     max_elapsed_seconds: float | None,
+    api_provider: VoiceProvider,
     provider_settings: ProviderSettings,
     summary: SummaryReporter,
     skipped_count: int,
@@ -161,10 +170,9 @@ async def _run_voice_async(
         octave_version=octave_version,
         max_elapsed_seconds=max_elapsed_seconds,
     )
-    service = VoiceService(provider_settings=provider_settings)
+    service = VoiceService(api_provider, provider_settings=provider_settings)
     return await service.run_voice_async(
         worklist,
-        headers=headers,
         output_dir=output_dir,
         settings=voice_settings,
         summary=summary,

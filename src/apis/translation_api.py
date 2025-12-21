@@ -19,36 +19,11 @@ from utils.command_utils import ProviderSettings, build_runner, build_task_specs
 
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
+    from providers.types import TranslationProvider
 
 
 class TokenEncoder(Protocol):
-    def encode(self, text: str) -> list[int]:
-        ...
-
-
-class ChatCompletionMessage(Protocol):
-    content: str | None
-
-
-class ChatCompletionChoice(Protocol):
-    message: ChatCompletionMessage
-
-
-class ChatCompletionResponse(Protocol):
-    choices: list[ChatCompletionChoice]
-
-
-class ChatCompletions(Protocol):
-    def create(self, *, model: str, messages: list[dict[str, str]]) -> ChatCompletionResponse:
-        ...
-
-
-class ChatAPI(Protocol):
-    completions: ChatCompletions
-
-
-class OpenAIClient(Protocol):
-    chat: ChatAPI
+    def encode(self, text: str) -> list[int]: ...
 
 
 StatusLiteral = Literal["ignored", "empty", "loaded", "skipped", "translated"]
@@ -83,12 +58,7 @@ def clean_text(text: str | None) -> str | None:
     """Convert escaped markers to real characters; unescape XML entities."""
     if text is None:
         return None
-    text = (
-        text.replace("\\n", "\n")
-        .replace("\\t", "\t")
-        .replace("\\'", "'")
-        .replace('\\"', '"')
-    )
+    text = text.replace("\\n", "\n").replace("\\t", "\t").replace("\\'", "'").replace('\\"', '"')
     return unescape(text)
 
 
@@ -100,13 +70,15 @@ def count_tokens(encoding, text: str) -> int:
 class TranslationService:
     """Reusable translation API for string resources."""
 
-    def __init__(self, client: OpenAIClient, provider_settings: ProviderSettings | None = None):
-        self._client = client
+    def __init__(
+        self, provider: "TranslationProvider", provider_settings: ProviderSettings | None = None
+    ):
+        self._provider = provider
         self._provider_settings = provider_settings
 
     def translate_text(self, text: str, model: str, target_language: str) -> str:
-        """Call the OpenAI chat completion API to translate text."""
-        return translate_text(self._client, text, model, target_language)
+        """Call the provider translate API to translate text."""
+        return self._provider.translate_text(text, model, target_language)
 
     def prepare_nodes(
         self,
@@ -142,9 +114,7 @@ class TranslationService:
 
         return pre_results, translate_nodes
 
-    def apply_translations(
-        self, root: Element, results: Iterable[TranslationResult]
-    ) -> None:
+    def apply_translations(self, root: Element, results: Iterable[TranslationResult]) -> None:
         """Apply translated text back to the XML tree for eligible entries."""
         for name, text, status in results:
             if status in ("translated", "loaded", "skipped"):
@@ -226,9 +196,7 @@ class TranslationService:
             self._provider_settings,
             TaskHooks[TranslationResult](),
         )
-        encoding = (
-            tiktoken.get_encoding("o200k_base") if settings.count_tokens_enabled else None
-        )
+        encoding = tiktoken.get_encoding("o200k_base") if settings.count_tokens_enabled else None
         work_items: list[tuple[str, Callable[[], Awaitable[TranslationResult]]]] = []
         for idx, node in enumerate(nodes):
             task_name = node.get("name") or f"string-{idx}"
@@ -273,31 +241,14 @@ class TranslationService:
         return results
 
 
-def translate_text(client: OpenAIClient, text: str, model: str, target_language: str) -> str:
-    """Call the OpenAI chat completion API to translate text."""
-    prompt = f"""
-Translate the following text into {target_language} in a literary, artistic manner.
-Do not add anything, do not modify structure, only translate the meaning:
-
-{text}
-""".strip()
-
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-    )
-    content = response.choices[0].message.content or ""
-    return content.strip()
-
-
 def process_string(
     node: Element,
     *,
     translate_pattern: re.Pattern[str],
     ignore_pattern: re.Pattern[str],
-        done: dict[str, str | None],
+    done: dict[str, str | None],
     progress_lock: Lock,
-    client: OpenAIClient,
+    provider: "TranslationProvider",
     progress_file: Path,
     model: str,
     dry_run: bool,
@@ -320,7 +271,7 @@ def process_string(
         progress_file=progress_file,
         progress_lock=progress_lock,
     )
-    service = TranslationService(client)
+    service = TranslationService(provider)
     return service._process_node(
         node,
         filters=filters,

@@ -38,6 +38,7 @@ if TYPE_CHECKING:
 else:
     ElementTreeT = ET.ElementTree
 
+
 @dataclass
 class ProviderSettings:
     api_key: str
@@ -79,9 +80,7 @@ def load_provider_settings(
     model = get_config_value(config, provider_key, "model", required=False, default=default_model)
     rpm = int(get_config_value(config, provider_key, "rpm", required=False, default=default_rpm))
     retry = load_retry_defaults(config)
-    concurrency = derive_concurrency(
-        rpm, concurrency_override or provider_cfg.get("concurrency")
-    )
+    concurrency = derive_concurrency(rpm, concurrency_override or provider_cfg.get("concurrency"))
     return ProviderSettings(
         api_key=api_key,
         model=model,
@@ -106,6 +105,7 @@ def build_task_specs(
 ) -> list[TaskSpec[T]]:
     specs: list[TaskSpec[T]] = []
     for task_id, coro_factory in worklist:
+
         async def wrapper(fn=coro_factory):
             return await fn()
 

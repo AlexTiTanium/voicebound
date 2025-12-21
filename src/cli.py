@@ -55,9 +55,9 @@ def main(
         raise typer.Exit()
 
 
-app.command(
-    "translate", help="Translate strings.xml into a target language."
-)(ai_translate.typer_command)
+app.command("translate", help="Translate strings.xml into a target language.")(
+    ai_translate.typer_command
+)
 app.command("voice", help="Generate audio from translated text.")(ai_voice.typer_command)
 
 

@@ -15,8 +15,8 @@ from utils.command_utils import ProviderSettings, build_runner, build_task_specs
 
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
+    from providers.types import VoiceProvider
 
-API_URL = "https://api.hume.ai/v0/tts/file"
 
 class VoiceFormat(TypedDict):
     type: str
@@ -57,30 +57,11 @@ class VoiceSettings:
 class VoiceService:
     """Reusable voice synthesis API for cached translations."""
 
-    def __init__(self, provider_settings: ProviderSettings | None = None, api_url: str = API_URL):
+    def __init__(
+        self, provider: "VoiceProvider", provider_settings: ProviderSettings | None = None
+    ):
+        self._provider = provider
         self._provider_settings = provider_settings
-        self._api_url = api_url
-
-    def build_payload(self, text: str, *, settings: VoiceSettings) -> VoicePayload:
-        """Construct the Hume request payload for one utterance."""
-        return {
-            "model": settings.model,
-            "format": {"type": settings.audio_format},
-            "split_utterances": settings.split_utterances,
-            "version": settings.octave_version,
-            "utterances": [
-                {
-                    "text": text,
-                    "voice": {"name": settings.voice_name, "provider": settings.provider},
-                }
-            ],
-        }
-
-    async def send_request(
-        self, client: httpx.AsyncClient, headers: dict[str, str], payload: VoicePayload
-    ) -> httpx.Response:
-        """POST to Hume TTS endpoint using an async client."""
-        return await client.post(self._api_url, headers=headers, json=payload, timeout=120)
 
     async def synthesize_once(
         self,
@@ -93,7 +74,7 @@ class VoiceService:
     ) -> Path:
         """Send one synthesis request and persist the audio file."""
         start = time.perf_counter()
-        response = await self.send_request(client, headers, payload)
+        response = await self._provider.send_request(client, headers, payload)
         if response.status_code != 200:
             raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
         if max_elapsed_seconds is not None and (time.perf_counter() - start) > max_elapsed_seconds:
@@ -105,23 +86,23 @@ class VoiceService:
         self,
         worklist: list[tuple[str, str]],
         *,
-        headers: dict[str, str],
         output_dir: Path,
         settings: VoiceSettings,
         summary: SummaryReporter,
         skipped_count: int,
     ) -> list[VoiceResult]:
-        """Execute Hume synthesis tasks via TaskRunner."""
+        """Execute voice synthesis tasks via TaskRunner."""
         provider_settings = self._provider_settings
         if provider_settings is None:
             raise ValueError("provider_settings is required for run_voice_async.")
         results: list[VoiceResult] = []
         runner = build_runner("voice", provider_settings, TaskHooks[Path]())
+        headers = self._provider.build_headers(provider_settings)
         work_items: list[tuple[str, Callable[[], Awaitable[Path]]]] = []
         async with httpx.AsyncClient() as client:
             for key, text in worklist:
                 out_path = output_dir / f"{key}.{settings.audio_format}"
-                payload = self.build_payload(text, settings=settings)
+                payload = self._provider.build_payload(text, settings=settings)
 
                 async def coro(payload=payload, out_path=out_path):
                     return await self.synthesize_once(
