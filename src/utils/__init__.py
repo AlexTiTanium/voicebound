@@ -6,7 +6,7 @@ import time
 import warnings
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Mapping, TypeVar
 
 import toml
 from loguru import logger
@@ -23,6 +23,7 @@ REQUIRED_CONFIG = {
     "hume_ai": ["api_key"],
 }
 
+T = TypeVar("T")
 
 def configure_logging(level: str | None = None, *, color: bool = True) -> None:
     """Configure loguru to log to stderr once per process (keeps stdout clean for progress)."""
@@ -58,7 +59,7 @@ def resolve_config_path(config_path: Path | None = None) -> Path:
     )
 
 
-def load_config(config_path: Path | None = None) -> dict:
+def load_config(config_path: Path | None = None) -> dict[str, Any]:
     """Load full config file with validation."""
     if config_path is not None:
         if not config_path.exists():
@@ -71,7 +72,7 @@ def load_config(config_path: Path | None = None) -> dict:
     return data
 
 
-def validate_config(config: dict, path: Path) -> None:
+def validate_config(config: dict[str, Any], path: Path) -> None:
     """Ensure required sections/keys exist and are non-empty."""
     missing: list[str] = []
     for section, keys in REQUIRED_CONFIG.items():
@@ -86,7 +87,12 @@ def validate_config(config: dict, path: Path) -> None:
 
 
 def get_config_value(
-    config: dict, section: str, key: str, *, required: bool = True, default: Any = None
+    config: Mapping[str, Any],
+    section: str,
+    key: str,
+    *,
+    required: bool = True,
+    default: Any = None,
 ) -> Any:
     """Fetch a value from config with optional default and required enforcement."""
     value = config.get(section, {}).get(key, default)
@@ -100,7 +106,7 @@ def ensure_directory(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
 
 
-def load_json(path: Path, default: Any = None) -> Any:
+def load_json(path: Path, default: T | None = None) -> T | None:
     """Load JSON content or return default when file is missing."""
     if not path.exists():
         return default

@@ -5,7 +5,7 @@ import anyio
 import typer
 from loguru import logger
 
-from apis.voice_api import VoiceService, VoiceSettings
+from apis.voice_api import VoiceResult, VoiceService, VoiceSettings
 from core.summary_reporter import SummaryReporter
 from utils import (
     compile_regex,
@@ -15,7 +15,12 @@ from utils import (
     load_config,
     resolve_path,
 )
-from utils.command_utils import build_voice_worklist, load_progress, load_provider_settings
+from utils.command_utils import (
+    ProviderSettings,
+    build_voice_worklist,
+    load_progress,
+    load_provider_settings,
+)
 
 
 class VoiceSummary(TypedDict):
@@ -76,7 +81,7 @@ def generate_voice(
     if not input_file.exists():
         raise SystemExit(f"Progress file not found: {input_file}. Run translate first.")
 
-    progress = load_progress(input_file, default={})
+    progress: dict[str, str | None] = load_progress(input_file, default={}) or {}
     ensure_directory(output_dir)
     headers = {
         "Content-Type": "application/json",
@@ -143,10 +148,10 @@ async def _run_voice_async(
     split_utterances: bool,
     octave_version: str,
     max_elapsed_seconds: float | None,
-    provider_settings,
+    provider_settings: ProviderSettings,
     summary: SummaryReporter,
     skipped_count: int,
-) -> list[tuple[str, str]]:
+) -> list[VoiceResult]:
     voice_settings = VoiceSettings(
         model=model,
         voice_name=voice_name,

@@ -39,7 +39,7 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 ## Lint/format
 - Ruff lint: `uv run ruff check .`
 - Ruff format: `uv run ruff format .`
-- Mypy: `uv run mypy --config-file pyproject.toml src tests`
+- Ty: `uv run ty check`
 
 ## Troubleshooting
 - “Config not found”: verify `--config-path` or `VOICEBOUND_CONFIG` and that `config.toml` exists.

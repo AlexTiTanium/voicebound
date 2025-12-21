@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import os
+import re
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable, Optional
+from typing import Any, Awaitable, Callable, Iterable, Optional, TypeVar, Mapping, TYPE_CHECKING, TypeAlias, cast
 
 from loguru import logger
 from rich.progress import (
@@ -19,6 +21,11 @@ from rich.progress import (
 from core.task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
 from utils import get_config_value, load_json, write_json
 
+T = TypeVar("T")
+if TYPE_CHECKING:
+    ElementTreeT: TypeAlias = ET.ElementTree[ET.Element | None]
+else:
+    ElementTreeT = ET.ElementTree
 
 @dataclass
 class ProviderSettings:
@@ -38,7 +45,7 @@ def derive_concurrency(rpm: int, override: int | None = None) -> int:
     return max(1, min(cpus, est))
 
 
-def load_retry_defaults(config: dict) -> RetryConfig:
+def load_retry_defaults(config: Mapping[str, Any]) -> RetryConfig:
     retry_cfg = config.get("retry", {})
     return RetryConfig(
         attempts=int(retry_cfg.get("attempts", 3)),
@@ -49,7 +56,7 @@ def load_retry_defaults(config: dict) -> RetryConfig:
 
 
 def load_provider_settings(
-    config: dict,
+    config: Mapping[str, Any],
     *,
     provider_key: str,
     default_model: str,
@@ -73,7 +80,7 @@ def load_provider_settings(
     )
 
 
-def build_runner(name: str, settings: ProviderSettings, hooks: TaskHooks) -> TaskRunner:
+def build_runner(name: str, settings: ProviderSettings, hooks: TaskHooks[T]) -> TaskRunner[T]:
     runner_cfg = RunnerConfig(
         name=name,
         rpm=settings.rpm,
@@ -84,9 +91,9 @@ def build_runner(name: str, settings: ProviderSettings, hooks: TaskHooks) -> Tas
 
 
 def build_task_specs(
-    worklist: Iterable[tuple[str, Callable[[], Awaitable[Any]]]],
-) -> list[TaskSpec]:
-    specs: list[TaskSpec] = []
+    worklist: Iterable[tuple[str, Callable[[], Awaitable[T]]]],
+) -> list[TaskSpec[T]]:
+    specs: list[TaskSpec[T]] = []
     for task_id, coro_factory in worklist:
         async def wrapper(fn=coro_factory):
             return await fn()
@@ -112,9 +119,9 @@ class OutcomeCollector:
 
 @dataclass
 class RunnerCallbacks:
-    on_success: Callable[[TaskSpec, Any], None] | None = None
-    on_failure: Callable[[TaskSpec, BaseException], None] | None = None
-    on_retry: Callable[[TaskSpec, int, float | None], None] | None = None
+    on_success: Callable[[TaskSpec[Any], Any], None] | None = None
+    on_failure: Callable[[TaskSpec[Any], BaseException], None] | None = None
+    on_retry: Callable[[TaskSpec[Any], int, float | None], None] | None = None
 
 
 def log_retry(
@@ -124,25 +131,26 @@ def log_retry(
     logger.warning(f"[{command.upper()}] {task_id} retry {attempt}/{total} (sleep {sleep_desc})")
 
 
-def load_strings(path: Path):
-    import xml.etree.ElementTree as ET
-
-    tree = ET.parse(path)
-    return tree, tree.getroot()
+def load_strings(path: Path) -> tuple[ElementTreeT, ET.Element]:
+    tree = cast(ElementTreeT, ET.parse(path))
+    root = tree.getroot()
+    if root is None:
+        raise ValueError(f"XML root missing in {path}")
+    return tree, root
 
 
 def persist_progress(path: Path, data: Any) -> None:
     write_json(path, data)
 
 
-def load_progress(path: Path, default: Any = None) -> Any:
+def load_progress(path: Path, default: T | None = None) -> T | None:
     return load_json(path, default=default)
 
 
 def build_voice_worklist(
-    progress: dict[str, str],
-    allowed_pattern,
-    ignore_pattern,
+    progress: Mapping[str, str | None],
+    allowed_pattern: re.Pattern[str],
+    ignore_pattern: re.Pattern[str] | None,
     existing_outputs: set[str],
     stop_after: int,
     output_dir: Path,
@@ -150,6 +158,8 @@ def build_voice_worklist(
 ) -> list[tuple[str, str]]:
     worklist: list[tuple[str, str]] = []
     for key, text in progress.items():
+        if text is None:
+            continue
         if stop_after and len(worklist) >= stop_after:
             break
         if key in existing_outputs:

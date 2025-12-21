@@ -1,6 +1,6 @@
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, Optional, TypedDict
+from typing import Iterable, Optional, TypedDict, cast
 
 import anyio
 import typer
@@ -8,8 +8,10 @@ from loguru import logger
 from openai import OpenAI
 
 from apis.translation_api import (
+    OpenAIClient,
     TranslationFilters,
     TranslationProgress,
+    TranslationResult,
     TranslationService,
     TranslationSettings,
 )
@@ -100,7 +102,7 @@ def translate_strings(
 
     tree, root = load_strings(input_file)
 
-    done = load_progress(progress_file, default={}) or {}
+    done: dict[str, str | None] = load_progress(progress_file, default={}) or {}
     progress_lock = Lock()
     tasks = list(root.findall("string"))
     translation_filters = TranslationFilters(
@@ -118,7 +120,8 @@ def translate_strings(
         progress_file=progress_file,
         progress_lock=progress_lock,
     )
-    service = TranslationService(OpenAI(api_key=api_key), ctx.provider)
+    client = cast(OpenAIClient, OpenAI(api_key=api_key))
+    service = TranslationService(client, ctx.provider)
     pre_results, translate_nodes = service.prepare_nodes(
         tasks,
         filters=translation_filters,
@@ -135,7 +138,7 @@ def translate_strings(
         for name, _, status in pre_results:
             if isinstance(status, str):
                 summary.record_translation(status, name)
-        async def _run_translate():
+        async def _run_translate() -> list[TranslationResult]:
             return await service.translate_nodes_async(
                 translate_nodes,
                 filters=translation_filters,
@@ -158,17 +161,17 @@ def translate_strings(
     tree.write(output_file, encoding="utf-8", xml_declaration=True)
 
 
-def _print_dry_run(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> None:
+def _print_dry_run(results: Iterable[TranslationResult]) -> None:
     """Print/log a dry-run summary showing counts and token estimates."""
     total_tokens = 0
     count = 0
 
     for name, data, status in results:
-        if isinstance(status, tuple) and status[0] == "dry-run":
-            _, tokens, preview = status
-            total_tokens += tokens
-            count += 1
-            logger.info(f"[DRY] {name}: {tokens} tokens → '{preview}...'")
+        match status:
+            case ("dry-run", tokens, preview):
+                total_tokens += tokens
+                count += 1
+                logger.info(f"[DRY] {name}: {tokens} tokens → '{preview}...'")
 
     logger.info("=== SUMMARY ===")
     logger.info(f"Strings to be translated: {count}")
@@ -213,7 +216,7 @@ def typer_command(
     )
 
 
-def _summarize_results(results: Iterable[tuple[str | None, str | None, str | tuple]]) -> Summary:
+def _summarize_results(results: Iterable[TranslationResult]) -> Summary:
     summary: Summary = {
         "translated": 0,
         "skipped": 0,

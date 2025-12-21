@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Awaitable, Callable, Iterable, Sequence
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Iterable, Sequence, TypeVar
 
 from loguru import logger
 
@@ -13,6 +13,7 @@ from utils.command_utils import ProgressReporter, ProviderSettings, load_provide
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
 
+T = TypeVar("T")
 
 @dataclass
 class CommandContext:
@@ -43,9 +44,9 @@ def make_command_context(
     return CommandContext(config=config, provider=provider, logger=logger)
 
 
-def build_tasks(worklist: Iterable[tuple[str, Callable[[], Awaitable]]]) -> list[TaskSpec]:
+def build_tasks(worklist: Iterable[tuple[str, Callable[[], Awaitable[T]]]]) -> list[TaskSpec[T]]:
     """Convert key→coro_factory pairs into TaskSpec list."""
-    specs: list[TaskSpec] = []
+    specs: list[TaskSpec[T]] = []
     for key, coro_factory in worklist:
         async def wrapper(fn=coro_factory):
             return await fn()
@@ -57,16 +58,16 @@ def build_tasks(worklist: Iterable[tuple[str, Callable[[], Awaitable]]]) -> list
 async def run_with_progress(
     name: str,
     total: int,
-    runner: TaskRunner,
-    specs: Sequence[TaskSpec],
+    runner: TaskRunner[T],
+    specs: Sequence[TaskSpec[T]],
     summary: SummaryReporter,
-    success_cb: Callable[[TaskSpec, Any], None] | None = None,
-    failure_cb: Callable[[TaskSpec, BaseException], None] | None = None,
-    retry_cb: Callable[[TaskSpec, int, float | None], None] | None = None,
+    success_cb: Callable[[TaskSpec[T], T], None] | None = None,
+    failure_cb: Callable[[TaskSpec[T], BaseException], None] | None = None,
+    retry_cb: Callable[[TaskSpec[T], int, float | None], None] | None = None,
 ) -> SummaryReporter:
     progress = ProgressReporter(f"[{name.upper()}] Processing", total=total)
 
-    async def hook_success(spec: TaskSpec, result):
+    async def hook_success(spec: TaskSpec[T], result: T):
         if success_cb:
             success_cb(spec, result)
         else:
@@ -74,14 +75,14 @@ async def run_with_progress(
         progress.advance()
         return result
 
-    async def hook_failure(spec: TaskSpec, exc: BaseException):
+    async def hook_failure(spec: TaskSpec[T], exc: BaseException):
         if failure_cb:
             failure_cb(spec, exc)
         else:
             summary.record_failure(spec.task_id, exc)
         progress.advance()
 
-    def retry_hook(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
+    def retry_hook(spec: TaskSpec[T], attempt: int, sleep_for: float | None) -> None:
         if retry_cb:
             retry_cb(spec, attempt, sleep_for)
         else:
@@ -91,7 +92,7 @@ async def run_with_progress(
                 f"(sleep {sleep_desc})"
             )
 
-    runner.hooks = TaskHooks(
+    runner.hooks = TaskHooks[T](
         on_success=hook_success,
         on_failure=hook_failure,
         on_retry=retry_hook,

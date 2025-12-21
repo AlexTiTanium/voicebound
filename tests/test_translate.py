@@ -9,6 +9,7 @@ import pytest
 import typer
 
 from apis import translation_api
+from apis.translation_api import OpenAIClient, TranslationResult
 from commands import ai_translate
 
 
@@ -239,7 +240,9 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
     )
 
     # _print_dry_run with payload
-    ai_translate._print_dry_run([("a", None, ("dry-run", 1, "p"))])
+    ai_translate._print_dry_run(
+        cast(list[TranslationResult], [("a", None, ("dry-run", 1, "p"))])
+    )
 
     # empty branch
     node = ET.Element("string", {"name": "empty"})
@@ -250,7 +253,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=cast(ai_translate.OpenAI, DummyOpenAI("k", "Hola")),
+        client=cast(OpenAIClient, DummyOpenAI("k", "Hola")),
         progress_file=tmp_path / "p.json",
         model="m",
         dry_run=False,
@@ -267,7 +270,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=cast(ai_translate.OpenAI, DummyOpenAI("k", "Hola")),
+        client=cast(OpenAIClient, DummyOpenAI("k", "Hola")),
         progress_file=tmp_path / "p2.json",
         model="m",
         dry_run=True,
@@ -284,7 +287,7 @@ def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
         ignore_pattern=re.compile(r"^$"),
         done={},
         progress_lock=Lock(),
-        client=cast(ai_translate.OpenAI, DummyOpenAI("k", "Hola")),
+        client=cast(OpenAIClient, DummyOpenAI("k", "Hola")),
         progress_file=progress_file,
         model="m",
         dry_run=False,
@@ -367,5 +370,7 @@ def test_translate_reports_errors(monkeypatch, tmp_path):
         max_workers=1,
     )
     assert output_file.exists()
-    summary = ai_translate._summarize_results([("bad", None, ("error", "boom"))])
+    summary = ai_translate._summarize_results(
+        cast(list[TranslationResult], [("bad", None, ("error", "boom"))])
+    )
     assert summary["errors"] == ["bad"]

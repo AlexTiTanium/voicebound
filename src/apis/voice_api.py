@@ -3,19 +3,43 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
+from typing import Awaitable, Callable, TypedDict, Literal
 
 import anyio
+from anyio import to_thread
 import httpx
 from loguru import logger
 
 from core.command_context import run_with_progress
+from core.summary_reporter import SummaryReporter
 from core.task_runner import TaskHooks, TaskSpec
 from utils.command_utils import ProviderSettings, build_runner, build_task_specs, log_retry
 
 API_URL = "https://api.hume.ai/v0/tts/file"
 
-VoiceResult = tuple[str, str]
+class VoiceFormat(TypedDict):
+    type: str
+
+
+class VoiceMeta(TypedDict):
+    name: str
+    provider: str
+
+
+class VoiceUtterance(TypedDict):
+    text: str
+    voice: VoiceMeta
+
+
+class VoicePayload(TypedDict):
+    model: str
+    format: VoiceFormat
+    split_utterances: bool
+    version: str
+    utterances: list[VoiceUtterance]
+
+
+VoiceResult = tuple[str, Literal["ok", "error"]]
 
 
 @dataclass(frozen=True)
@@ -36,7 +60,7 @@ class VoiceService:
         self._provider_settings = provider_settings
         self._api_url = api_url
 
-    def build_payload(self, text: str, *, settings: VoiceSettings) -> Dict[str, Any]:
+    def build_payload(self, text: str, *, settings: VoiceSettings) -> VoicePayload:
         """Construct the Hume request payload for one utterance."""
         return {
             "model": settings.model,
@@ -52,7 +76,7 @@ class VoiceService:
         }
 
     async def send_request(
-        self, client: httpx.AsyncClient, headers: Dict[str, str], payload: Dict[str, Any]
+        self, client: httpx.AsyncClient, headers: dict[str, str], payload: VoicePayload
     ) -> httpx.Response:
         """POST to Hume TTS endpoint using an async client."""
         return await client.post(self._api_url, headers=headers, json=payload, timeout=120)
@@ -61,8 +85,8 @@ class VoiceService:
         self,
         *,
         client: httpx.AsyncClient,
-        headers: Dict[str, str],
-        payload: Dict[str, Any],
+        headers: dict[str, str],
+        payload: VoicePayload,
         out_path: Path,
         max_elapsed_seconds: float | None,
     ) -> Path:
@@ -73,7 +97,7 @@ class VoiceService:
             raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
         if max_elapsed_seconds is not None and (time.perf_counter() - start) > max_elapsed_seconds:
             raise TimeoutError(f"max elapsed {max_elapsed_seconds}s exceeded")
-        await anyio.to_thread.run_sync(out_path.write_bytes, response.content)
+        await to_thread.run_sync(out_path.write_bytes, response.content)
         return out_path
 
     async def run_voice_async(
@@ -83,7 +107,7 @@ class VoiceService:
         headers: dict[str, str],
         output_dir: Path,
         settings: VoiceSettings,
-        summary,
+        summary: SummaryReporter,
         skipped_count: int,
     ) -> list[VoiceResult]:
         """Execute Hume synthesis tasks via TaskRunner."""
@@ -91,8 +115,8 @@ class VoiceService:
         if provider_settings is None:
             raise ValueError("provider_settings is required for run_voice_async.")
         results: list[VoiceResult] = []
-        runner = build_runner("voice", provider_settings, TaskHooks())
-        work_items: list[tuple[str, Any]] = []
+        runner = build_runner("voice", provider_settings, TaskHooks[Path]())
+        work_items: list[tuple[str, Callable[[], Awaitable[Path]]]] = []
         async with httpx.AsyncClient() as client:
             for key, text in worklist:
                 out_path = output_dir / f"{key}.{settings.audio_format}"

@@ -6,9 +6,11 @@ from dataclasses import dataclass
 from html import unescape
 from pathlib import Path
 from threading import Lock
-from typing import TYPE_CHECKING, Any, Callable, Iterable
+from typing import TYPE_CHECKING, Awaitable, Callable, Iterable, Literal, Protocol
+from xml.etree.ElementTree import Element
 
 import anyio
+from anyio import to_thread
 import tiktoken
 from loguru import logger
 
@@ -19,7 +21,41 @@ from utils.command_utils import ProviderSettings, build_runner, build_task_specs
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
 
-TranslationResult = tuple[str | None, str | None, str | tuple]
+class TokenEncoder(Protocol):
+    def encode(self, text: str) -> list[int]:
+        ...
+
+
+class ChatCompletionMessage(Protocol):
+    content: str | None
+
+
+class ChatCompletionChoice(Protocol):
+    message: ChatCompletionMessage
+
+
+class ChatCompletionResponse(Protocol):
+    choices: list[ChatCompletionChoice]
+
+
+class ChatCompletions(Protocol):
+    def create(self, *, model: str, messages: list[dict[str, str]]) -> ChatCompletionResponse:
+        ...
+
+
+class ChatAPI(Protocol):
+    completions: ChatCompletions
+
+
+class OpenAIClient(Protocol):
+    chat: ChatAPI
+
+
+StatusLiteral = Literal["ignored", "empty", "loaded", "skipped", "translated"]
+DryRunStatus = tuple[Literal["dry-run"], int, str]
+ErrorStatus = tuple[Literal["error"], str]
+TranslationStatus = StatusLiteral | DryRunStatus | ErrorStatus
+TranslationResult = tuple[str, str | None, TranslationStatus]
 
 
 @dataclass(frozen=True)
@@ -38,7 +74,7 @@ class TranslationSettings:
 
 @dataclass
 class TranslationProgress:
-    done: dict
+    done: dict[str, str | None]
     progress_file: Path
     progress_lock: Lock
 
@@ -64,7 +100,7 @@ def count_tokens(encoding, text: str) -> int:
 class TranslationService:
     """Reusable translation API for string resources."""
 
-    def __init__(self, client: Any, provider_settings: ProviderSettings | None = None):
+    def __init__(self, client: OpenAIClient, provider_settings: ProviderSettings | None = None):
         self._client = client
         self._provider_settings = provider_settings
 
@@ -74,13 +110,13 @@ class TranslationService:
 
     def prepare_nodes(
         self,
-        nodes: Iterable,
+        nodes: Iterable[Element],
         *,
         filters: TranslationFilters,
-        done: dict,
-    ) -> tuple[list[TranslationResult], list]:
+        done: dict[str, str | None],
+    ) -> tuple[list[TranslationResult], list[Element]]:
         pre_results: list[TranslationResult] = []
-        translate_nodes: list = []
+        translate_nodes: list[Element] = []
         for node in nodes:
             name = node.get("name") or ""
             original = (node.text or "").strip()
@@ -107,7 +143,7 @@ class TranslationService:
         return pre_results, translate_nodes
 
     def apply_translations(
-        self, root, results: Iterable[TranslationResult]
+        self, root: Element, results: Iterable[TranslationResult]
     ) -> None:
         """Apply translated text back to the XML tree for eligible entries."""
         for name, text, status in results:
@@ -119,12 +155,12 @@ class TranslationService:
 
     def _process_node(
         self,
-        node,
+        node: Element,
         *,
         filters: TranslationFilters,
         progress: TranslationProgress,
         settings: TranslationSettings,
-        encoding,
+        encoding: TokenEncoder | None,
     ) -> TranslationResult:
         name = node.get("name") or ""
         original = (node.text or "").strip()
@@ -174,7 +210,7 @@ class TranslationService:
 
     async def translate_nodes_async(
         self,
-        nodes: list,
+        nodes: list[Element],
         *,
         filters: TranslationFilters,
         progress: TranslationProgress,
@@ -188,12 +224,12 @@ class TranslationService:
         runner = build_runner(
             "translate",
             self._provider_settings,
-            TaskHooks(),
+            TaskHooks[TranslationResult](),
         )
         encoding = (
             tiktoken.get_encoding("o200k_base") if settings.count_tokens_enabled else None
         )
-        work_items: list[tuple[str, Callable[..., Any]]] = []
+        work_items: list[tuple[str, Callable[[], Awaitable[TranslationResult]]]] = []
         for idx, node in enumerate(nodes):
             task_name = node.get("name") or f"string-{idx}"
             task_fn = functools.partial(
@@ -205,14 +241,14 @@ class TranslationService:
                 encoding=encoding,
             )
 
-            async def coro(fn=task_fn):
-                return await anyio.to_thread.run_sync(fn)
+            async def coro() -> TranslationResult:
+                return await to_thread.run_sync(task_fn)
 
             work_items.append((task_name, coro))
 
         specs = build_task_specs(work_items)
 
-        def success_cb(spec: TaskSpec, result):
+        def success_cb(spec: TaskSpec[TranslationResult], result: TranslationResult) -> None:
             results.append(result)
             status = result[2]
             if isinstance(status, tuple):
@@ -220,7 +256,7 @@ class TranslationService:
             else:
                 summary.record_translation(status, result[0])
 
-        def failure_cb(spec: TaskSpec, exc: BaseException):
+        def failure_cb(spec: TaskSpec[TranslationResult], exc: BaseException) -> None:
             results.append((spec.task_id, None, ("error", str(exc))))
             summary.record_translation("error", spec.task_id)
 
@@ -237,7 +273,7 @@ class TranslationService:
         return results
 
 
-def translate_text(client: Any, text: str, model: str, target_language: str) -> str:
+def translate_text(client: OpenAIClient, text: str, model: str, target_language: str) -> str:
     """Call the OpenAI chat completion API to translate text."""
     prompt = f"""
 Translate the following text into {target_language} in a literary, artistic manner.
@@ -255,17 +291,17 @@ Do not add anything, do not modify structure, only translate the meaning:
 
 
 def process_string(
-    node,
+    node: Element,
     *,
     translate_pattern: re.Pattern[str],
     ignore_pattern: re.Pattern[str],
-    done: dict,
+        done: dict[str, str | None],
     progress_lock: Lock,
-    client: Any,
+    client: OpenAIClient,
     progress_file: Path,
     model: str,
     dry_run: bool,
-    encoding,
+    encoding: TokenEncoder | None,
     target_language: str,
 ) -> TranslationResult:
     """Translate one string node with caching, filters, and progress updates."""
