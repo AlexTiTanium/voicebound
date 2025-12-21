@@ -217,19 +217,46 @@ def translate_strings(
     done = load_progress(progress_file, default={}) or {}
     progress_lock = Lock()
     tasks = list(root.findall("string"))
+    pre_results: list[tuple[str | None, str | None, str | tuple]] = []
+    translate_nodes: list = []
+    for node in tasks:
+        name = node.get("name") or ""
+        original = (node.text or "").strip()
+        matches_regex = bool(translate_pattern.match(name))
+
+        if ignore_pattern.match(name):
+            pre_results.append((name, None, "ignored"))
+            continue
+
+        if not original:
+            pre_results.append((name, None, "empty"))
+            continue
+
+        if name in done:
+            pre_results.append((name, clean_text(done[name]), "loaded"))
+            continue
+
+        if not matches_regex:
+            pre_results.append((name, clean_text(original), "skipped"))
+            continue
+
+        translate_nodes.append(node)
 
     if not dry_run:
-        logger.info(f"[TRANSLATE] Translating {len(tasks)} strings using {model}.")
+        logger.info(f"[TRANSLATE] Translating {len(translate_nodes)} strings using {model}.")
     else:
-        logger.info(f"[TRANSLATE] Dry run enabled for {len(tasks)} strings.")
+        logger.info(f"[TRANSLATE] Dry run enabled for {len(translate_nodes)} strings.")
 
     encoding = tiktoken.get_encoding("o200k_base") if count_tokens_enabled else None
     client = OpenAI(api_key=api_key)
     try:
         summary = SummaryReporter("translate")
+        for name, _, status in pre_results:
+            if isinstance(status, str):
+                summary.record_translation(status, name)
         results = anyio.run(
             _run_translate_async,
-            tasks,
+            translate_nodes,
             translate_pattern,
             ignore_pattern,
             done,
@@ -243,6 +270,7 @@ def translate_strings(
             ctx.provider,
             summary,
         )
+        results = pre_results + results
     except KeyboardInterrupt:
         logger.warning("[TRANSLATE] Interrupted by user.")
         raise SystemExit(130)

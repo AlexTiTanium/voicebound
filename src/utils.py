@@ -104,15 +104,38 @@ def load_json(path: Path, default: Any = None) -> Any:
     """Load JSON content or return default when file is missing."""
     if not path.exists():
         return default
-    with path.open("r", encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            return json.load(fh)
+    except json.JSONDecodeError as exc:
+        logger.warning(f"[JSON] Failed to parse {path}: {exc}")
+        raw = path.read_text(encoding="utf-8")
+        repaired = re.sub(r",\s*(\}|\])\s*$", r"\1", raw, count=1)
+        if repaired != raw:
+            try:
+                data = json.loads(repaired)
+            except json.JSONDecodeError:
+                logger.error(f"[JSON] Repair failed for {path}; using default.")
+                return default
+            write_json(path, data)
+            logger.warning(f"[JSON] Repaired trailing comma in {path}.")
+            return data
+        return default
 
 
 def write_json(path: Path, data: Any) -> None:
     """Persist JSON data with UTF-8 encoding."""
     ensure_directory(path.parent)
-    with path.open("w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    tmp_path = path.with_name(f"{path.name}.tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+            fh.flush()
+            os.fsync(fh.fileno())
+        tmp_path.replace(path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
 
 
 class RateLimiter:
