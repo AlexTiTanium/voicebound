@@ -1,8 +1,10 @@
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import anyio
 import pytest
+from tenacity import Future, RetryCallState, RetryError
 
 import utils
 from core.command_context import build_tasks, make_command_context, run_with_progress
@@ -58,7 +60,7 @@ def test_build_tasks_wraps_coroutines():
 def test_run_with_progress_success_default():
     class DummyRunner:
         def __init__(self):
-            self.hooks = None
+            self.hooks: TaskHooks[Any] | None = None
             self.config = RunnerConfig(
                 name="test",
                 rpm=1,
@@ -67,20 +69,33 @@ def test_run_with_progress_success_default():
             )
 
         async def run(self, specs):
+            if self.hooks is None:
+                raise AssertionError("Hooks were not configured")
             for spec in specs:
-                await self.hooks.on_success(spec, "ok")
+                if self.hooks.on_success is None:
+                    raise AssertionError("Success hook was not configured")
+                result = self.hooks.on_success(spec, "ok")
+                if result is not None:
+                    await result
 
     runner = DummyRunner()
     summary = SummaryReporter("test")
     specs = [TaskSpec(task_id="ok", coro_factory=lambda: None)]
-    anyio.run(run_with_progress, "test", 1, runner, specs, summary)
+    anyio.run(
+        run_with_progress,
+        "test",
+        1,
+        cast(TaskRunner[Any], runner),
+        specs,
+        summary,
+    )
     assert summary.successes == 1
 
 
 def test_run_with_progress_failure_default():
     class DummyRunner:
         def __init__(self):
-            self.hooks = None
+            self.hooks: TaskHooks[Any] | None = None
             self.config = RunnerConfig(
                 name="test",
                 rpm=1,
@@ -89,20 +104,33 @@ def test_run_with_progress_failure_default():
             )
 
         async def run(self, specs):
+            if self.hooks is None:
+                raise AssertionError("Hooks were not configured")
             for spec in specs:
-                await self.hooks.on_failure(spec, ValueError("fail"))
+                if self.hooks.on_failure is None:
+                    raise AssertionError("Failure hook was not configured")
+                result = self.hooks.on_failure(spec, ValueError("fail"))
+                if result is not None:
+                    await result
 
     runner = DummyRunner()
     summary = SummaryReporter("test")
     specs = [TaskSpec(task_id="fail", coro_factory=lambda: None)]
-    anyio.run(run_with_progress, "test", 1, runner, specs, summary)
+    anyio.run(
+        run_with_progress,
+        "test",
+        1,
+        cast(TaskRunner[Any], runner),
+        specs,
+        summary,
+    )
     assert "fail" in summary.failures
 
 
 def test_run_with_progress_retry_default_logs(monkeypatch):
     class DummyRunner:
         def __init__(self):
-            self.hooks = None
+            self.hooks: TaskHooks[Any] | None = None
             self.config = RunnerConfig(
                 name="test",
                 rpm=1,
@@ -111,9 +139,15 @@ def test_run_with_progress_retry_default_logs(monkeypatch):
             )
 
         async def run(self, specs):
+            if self.hooks is None:
+                raise AssertionError("Hooks were not configured")
             for spec in specs:
+                if self.hooks.on_retry is None or self.hooks.on_success is None:
+                    raise AssertionError("Hooks were not configured")
                 self.hooks.on_retry(spec, 1, 0.0)
-                await self.hooks.on_success(spec, "ok")
+                result = self.hooks.on_success(spec, "ok")
+                if result is not None:
+                    await result
 
     runner = DummyRunner()
     calls: list[str] = []
@@ -124,14 +158,21 @@ def test_run_with_progress_retry_default_logs(monkeypatch):
     monkeypatch.setattr("core.command_context.logger.warning", _fake_warning)
     summary = SummaryReporter("test")
     specs = [TaskSpec(task_id="flaky", coro_factory=lambda: None)]
-    anyio.run(run_with_progress, "test", 1, runner, specs, summary)
+    anyio.run(
+        run_with_progress,
+        "test",
+        1,
+        cast(TaskRunner[Any], runner),
+        specs,
+        summary,
+    )
     assert calls
 
 
 def test_run_with_progress_retry_callback():
     class DummyRunner:
         def __init__(self):
-            self.hooks = None
+            self.hooks: TaskHooks[Any] | None = None
             self.config = RunnerConfig(
                 name="test",
                 rpm=1,
@@ -140,9 +181,15 @@ def test_run_with_progress_retry_callback():
             )
 
         async def run(self, specs):
+            if self.hooks is None:
+                raise AssertionError("Hooks were not configured")
             for spec in specs:
+                if self.hooks.on_retry is None or self.hooks.on_success is None:
+                    raise AssertionError("Hooks were not configured")
                 self.hooks.on_retry(spec, 1, 0.0)
-                await self.hooks.on_success(spec, "ok")
+                result = self.hooks.on_success(spec, "ok")
+                if result is not None:
+                    await result
 
     runner = DummyRunner()
     summary = SummaryReporter("test")
@@ -156,7 +203,7 @@ def test_run_with_progress_retry_callback():
         return await run_with_progress(
             "test",
             1,
-            runner,
+            cast(TaskRunner[Any], runner),
             specs,
             summary,
             retry_cb=_retry_cb,
@@ -167,8 +214,6 @@ def test_run_with_progress_retry_callback():
 
 
 def test_task_runner_retry_error_path(monkeypatch):
-    from tenacity import RetryError
-
     cfg = RunnerConfig(
         name="runner",
         rpm=1,
@@ -182,16 +227,14 @@ def test_task_runner_retry_error_path(monkeypatch):
 
     runner = TaskRunner(cfg, TaskHooks(on_failure=on_failure))
 
-    class DummyAttempt:
-        def exception(self):
-            return ValueError("boom")
-
     class RaisingRetrying:
         def __aiter__(self):
             return self
 
         async def __anext__(self):
-            raise RetryError(DummyAttempt())
+            future = Future(1)
+            future.set_exception(ValueError("boom"))
+            raise RetryError(future)
 
     monkeypatch.setattr(runner, "_make_retrying", lambda _spec: RaisingRetrying())
 
@@ -237,7 +280,7 @@ def test_task_runner_retry_hook_and_async_success():
         attempt_number = 1
         next_action = DummyNextAction()
 
-    handler(DummyState())
+    handler(cast(RetryCallState, DummyState()))
     assert retry_calls == [1]
 
 
@@ -255,7 +298,7 @@ def test_task_runner_before_sleep_no_retry():
         attempt_number = 1
         next_action = None
 
-    handler(DummyState())
+    handler(cast(RetryCallState, DummyState()))
 
 
 def test_task_runner_maybe_call_none():

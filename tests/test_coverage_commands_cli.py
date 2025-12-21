@@ -1,6 +1,7 @@
 import importlib.metadata
 import importlib.util
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import anyio
 import pytest
@@ -9,6 +10,9 @@ from commands import ai_translate, ai_voice
 from core.summary_reporter import SummaryReporter
 from core.task_runner import RetryConfig
 from utils.command_utils import ProviderSettings
+
+if TYPE_CHECKING:
+    from apis.translation_api import TranslationResult
 
 
 def _write_config(tmp_path: Path) -> Path:
@@ -37,8 +41,9 @@ def test_cli_version_fallback(monkeypatch):
 
     monkeypatch.setattr(importlib.metadata, "version", _raise)
     spec = importlib.util.spec_from_file_location("cli_fallback", cli_path)
+    if spec is None or spec.loader is None:
+        raise AssertionError("Expected module spec for cli_fallback")
     module = importlib.util.module_from_spec(spec)
-    assert spec and spec.loader
     spec.loader.exec_module(module)
     assert module.APP_VERSION == "0.0.0"
 
@@ -51,7 +56,7 @@ def test_translate_strings_no_provider(monkeypatch, tmp_path):
 
 
 def test_summarize_results_counts():
-    results = [
+    results: list["TranslationResult"] = [
         ("a", "x", "translated"),
         ("b", "x", "skipped"),
         ("c", "x", "loaded"),

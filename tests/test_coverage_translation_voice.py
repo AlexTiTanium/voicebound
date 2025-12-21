@@ -1,8 +1,10 @@
 import re
 from threading import Lock
+from typing import cast
 from xml.etree.ElementTree import Element
 
 import anyio
+import httpx
 import pytest
 
 from apis.translation_api import (
@@ -11,13 +13,19 @@ from apis.translation_api import (
     TranslationService,
     TranslationSettings,
 )
-from apis.voice_api import VoiceService, VoiceSettings
+from apis.voice_api import VoicePayload, VoiceService, VoiceSettings
 from core.summary_reporter import SummaryReporter
 from core.task_runner import RetryConfig
+from providers.types import TranslationProvider, VoiceProvider
 from utils.command_utils import ProviderSettings
 
 
 class DummyTranslationProvider:
+    key = "dummy"
+    name = "dummy"
+    default_model = "gpt-5-nano"
+    default_rpm = 60
+
     def translate_text(self, text: str, model: str, target_language: str) -> str:
         return f"{text}-{target_language}"
 
@@ -40,7 +48,7 @@ def _make_provider_settings() -> ProviderSettings:
 
 def test_process_node_branches(tmp_path):
     provider = DummyTranslationProvider()
-    service = TranslationService(provider)
+    service = TranslationService(cast(TranslationProvider, provider))
     filters = TranslationFilters(
         allowed_pattern=re.compile(r"^keep"),
         ignore_pattern=re.compile(r"^skip"),
@@ -96,7 +104,7 @@ def test_process_node_branches(tmp_path):
 
 def test_translate_nodes_async_requires_provider_settings(tmp_path):
     provider = DummyTranslationProvider()
-    service = TranslationService(provider, provider_settings=None)
+    service = TranslationService(cast(TranslationProvider, provider), provider_settings=None)
     filters = TranslationFilters(
         allowed_pattern=re.compile(r"^keep"),
         ignore_pattern=re.compile(r"^skip"),
@@ -129,7 +137,10 @@ def test_translate_nodes_async_requires_provider_settings(tmp_path):
 
 def test_translate_nodes_async_dry_run_records_tuple(tmp_path):
     provider = DummyTranslationProvider()
-    service = TranslationService(provider, provider_settings=_make_provider_settings())
+    service = TranslationService(
+        cast(TranslationProvider, provider),
+        provider_settings=_make_provider_settings(),
+    )
     filters = TranslationFilters(
         allowed_pattern=re.compile(r"^keep"),
         ignore_pattern=re.compile(r"^skip"),
@@ -163,7 +174,10 @@ def test_translate_nodes_async_dry_run_records_tuple(tmp_path):
 
 def test_translate_nodes_async_failure_callback(monkeypatch, tmp_path):
     provider = DummyTranslationProvider()
-    service = TranslationService(provider, provider_settings=_make_provider_settings())
+    service = TranslationService(
+        cast(TranslationProvider, provider),
+        provider_settings=_make_provider_settings(),
+    )
     filters = TranslationFilters(
         allowed_pattern=re.compile(r"^keep"),
         ignore_pattern=re.compile(r"^skip"),
@@ -209,6 +223,11 @@ class DummyResponse:
 
 
 class DummyVoiceProvider:
+    key = "dummy"
+    name = "dummy"
+    default_model = "octave"
+    default_rpm = 10
+
     def __init__(self, responses: list[DummyResponse]):
         self._responses = responses
         self.calls = 0
@@ -216,8 +235,8 @@ class DummyVoiceProvider:
     def build_headers(self, settings: ProviderSettings) -> dict[str, str]:
         return {"Authorization": f"Bearer {settings.api_key}"}
 
-    def build_payload(self, text: str, *, settings: VoiceSettings) -> dict[str, str]:
-        return {"text": text, "voice": settings.voice_name}
+    def build_payload(self, text: str, *, settings: VoiceSettings) -> VoicePayload:
+        return _voice_payload(text)
 
     async def send_request(self, *_args, **_kwargs) -> DummyResponse:
         response = self._responses[min(self.calls, len(self._responses) - 1)]
@@ -225,16 +244,31 @@ class DummyVoiceProvider:
         return response
 
 
+def _voice_payload(text: str) -> VoicePayload:
+    return {
+        "model": "octave",
+        "format": {"type": "mp3"},
+        "split_utterances": True,
+        "version": "2",
+        "utterances": [
+            {"text": text, "voice": {"name": "ivan", "provider": "hume_ai"}}
+        ],
+    }
+
+
 def test_voice_service_synthesize_once_success(tmp_path):
     provider = DummyVoiceProvider([DummyResponse(status_code=200, content=b"audio")])
-    service = VoiceService(provider, provider_settings=_make_provider_settings())
+    service = VoiceService(
+        cast(VoiceProvider, provider),
+        provider_settings=_make_provider_settings(),
+    )
     out_path = tmp_path / "out.mp3"
 
     async def _run():
         return await service.synthesize_once(
-            client=object(),
+            client=cast(httpx.AsyncClient, object()),
             headers={"a": "b"},
-            payload={"text": "hi"},
+            payload=_voice_payload("hi"),
             out_path=out_path,
             max_elapsed_seconds=None,
         )
@@ -247,14 +281,17 @@ def test_voice_service_synthesize_once_success(tmp_path):
 
 def test_voice_service_synthesize_once_http_error(tmp_path):
     provider = DummyVoiceProvider([DummyResponse(status_code=500, text="bad")])
-    service = VoiceService(provider, provider_settings=_make_provider_settings())
+    service = VoiceService(
+        cast(VoiceProvider, provider),
+        provider_settings=_make_provider_settings(),
+    )
 
     with pytest.raises(RuntimeError):
         async def _run():
             return await service.synthesize_once(
-                client=object(),
+                client=cast(httpx.AsyncClient, object()),
                 headers={"a": "b"},
-                payload={"text": "hi"},
+                payload=_voice_payload("hi"),
                 out_path=tmp_path / "out.mp3",
                 max_elapsed_seconds=None,
             )
@@ -264,16 +301,19 @@ def test_voice_service_synthesize_once_http_error(tmp_path):
 
 def test_voice_service_synthesize_once_timeout(monkeypatch, tmp_path):
     provider = DummyVoiceProvider([DummyResponse(status_code=200)])
-    service = VoiceService(provider, provider_settings=_make_provider_settings())
+    service = VoiceService(
+        cast(VoiceProvider, provider),
+        provider_settings=_make_provider_settings(),
+    )
     times = iter([0.0, 2.0])
     monkeypatch.setattr("apis.voice_api.time.perf_counter", lambda: next(times))
 
     with pytest.raises(TimeoutError):
         async def _run():
             return await service.synthesize_once(
-                client=object(),
+                client=cast(httpx.AsyncClient, object()),
                 headers={"a": "b"},
-                payload={"text": "hi"},
+                payload=_voice_payload("hi"),
                 out_path=tmp_path / "out.mp3",
                 max_elapsed_seconds=1.0,
             )
@@ -284,7 +324,7 @@ def test_voice_service_synthesize_once_timeout(monkeypatch, tmp_path):
 def test_run_voice_async_success_and_skip(tmp_path):
     provider = DummyVoiceProvider([DummyResponse(status_code=200, content=b"ok")])
     settings = _make_provider_settings()
-    service = VoiceService(provider, provider_settings=settings)
+    service = VoiceService(cast(VoiceProvider, provider), provider_settings=settings)
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
@@ -317,7 +357,7 @@ def test_run_voice_async_success_and_skip(tmp_path):
 def test_run_voice_async_failure_records_error(monkeypatch, tmp_path):
     provider = DummyVoiceProvider([DummyResponse(status_code=500, text="bad")])
     settings = _make_provider_settings()
-    service = VoiceService(provider, provider_settings=settings)
+    service = VoiceService(cast(VoiceProvider, provider), provider_settings=settings)
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
@@ -377,7 +417,7 @@ def test_run_voice_async_retries_and_logs(monkeypatch, tmp_path):
         concurrency=1,
         retry=RetryConfig(attempts=2, backoff_base=0.0, backoff_max=0.0, jitter=False),
     )
-    service = VoiceService(provider, provider_settings=settings)
+    service = VoiceService(cast(VoiceProvider, provider), provider_settings=settings)
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
@@ -433,7 +473,7 @@ def test_run_voice_async_retries_and_logs(monkeypatch, tmp_path):
 
 def test_run_voice_async_requires_provider_settings(tmp_path):
     provider = DummyVoiceProvider([DummyResponse(status_code=200)])
-    service = VoiceService(provider, provider_settings=None)
+    service = VoiceService(cast(VoiceProvider, provider), provider_settings=None)
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",

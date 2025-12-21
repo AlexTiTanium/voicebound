@@ -1,4 +1,8 @@
-from apis.voice_api import VoiceSettings
+from typing import Any, cast
+
+import httpx
+
+from apis.voice_api import VoicePayload, VoiceSettings
 from core.task_runner import RetryConfig
 from providers import hume_provider, openai_provider, registry
 from utils.command_utils import ProviderSettings
@@ -37,9 +41,11 @@ def test_openai_translation_provider_builds_prompt(monkeypatch):
     result = provider.translate_text("Hello world", "gpt-5-nano", "Spanish")
 
     assert result == "Hola"
-    call = provider.client.chat.completions.calls[0]
+    client = cast(DummyOpenAI, provider.client)
+    call = cast(dict[str, Any], client.chat.completions.calls[0])
     assert call["model"] == "gpt-5-nano"
-    message = call["messages"][0]["content"]
+    messages = cast(list[dict[str, Any]], call["messages"])
+    message = cast(str, messages[0]["content"])
     assert "Spanish" in message
     assert "Hello world" in message
 
@@ -91,20 +97,30 @@ def test_hume_provider_send_request_uses_client():
             calls["timeout"] = timeout
             return DummyResponse()
 
+    payload: VoicePayload = {
+        "model": "octave",
+        "format": {"type": "mp3"},
+        "split_utterances": True,
+        "version": "2",
+        "utterances": [
+            {"text": "hello", "voice": {"name": "ivan", "provider": "hume_ai"}}
+        ],
+    }
+
     import asyncio
 
     response = asyncio.run(
         provider.send_request(
-            client=DummyClient(),
+            client=cast(httpx.AsyncClient, DummyClient()),
             headers={"h": "v"},
-            payload={"ok": True},
+            payload=payload,
         )
     )
 
     assert isinstance(response, DummyResponse)
     assert calls["url"] == hume_provider.API_URL
     assert calls["headers"] == {"h": "v"}
-    assert calls["json"] == {"ok": True}
+    assert calls["json"] == payload
     assert calls["timeout"] == 120
 
 
