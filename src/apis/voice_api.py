@@ -87,10 +87,11 @@ class VoiceService:
         skipped_count: int,
     ) -> list[VoiceResult]:
         """Execute Hume synthesis tasks via TaskRunner."""
-        if self._provider_settings is None:
+        provider_settings = self._provider_settings
+        if provider_settings is None:
             raise ValueError("provider_settings is required for run_voice_async.")
         results: list[VoiceResult] = []
-        runner = build_runner("voice", self._provider_settings, TaskHooks())
+        runner = build_runner("voice", provider_settings, TaskHooks())
         work_items: list[tuple[str, Any]] = []
         async with httpx.AsyncClient() as client:
             for key, text in worklist:
@@ -122,7 +123,7 @@ class VoiceService:
                     "voice",
                     spec.task_id,
                     attempt,
-                    self._provider_settings.retry.attempts,
+                    provider_settings.retry.attempts,
                     sleep_for,
                 )
 
