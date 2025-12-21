@@ -13,8 +13,8 @@ from apis.translation_api import (
     TranslationService,
     TranslationSettings,
 )
-from command_context import CommandContext, make_command_context
-from summary_reporter import SummaryReporter
+from core.command_context import CommandContext, make_command_context
+from core.summary_reporter import SummaryReporter
 from utils import (
     PROJECT_ROOT,
     compile_regex,

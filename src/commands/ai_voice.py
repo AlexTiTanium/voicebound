@@ -7,9 +7,9 @@ import httpx
 import typer
 from loguru import logger
 
-from command_context import run_with_progress
-from summary_reporter import SummaryReporter
-from task_runner import TaskHooks, TaskSpec
+from core.command_context import run_with_progress
+from core.summary_reporter import SummaryReporter
+from core.task_runner import TaskHooks, TaskSpec
 from utils import (
     compile_regex,
     configure_logging,

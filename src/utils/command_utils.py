@@ -16,7 +16,7 @@ from rich.progress import (
     TimeElapsedColumn,
 )
 
-from task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
+from core.task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
 from utils import get_config_value, load_json, write_json
 
 
