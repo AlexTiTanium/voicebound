@@ -51,7 +51,13 @@ class ProviderSettings:
         retry: Retry configuration derived from config.
 
     Example:
-        >>> settings = ProviderSettings(api_key="sk-...", model="gpt-5-nano", rpm=60, concurrency=4, retry=RetryConfig())
+        >>> settings = ProviderSettings(
+        ...     api_key="sk-...",
+        ...     model="gpt-5-nano",
+        ...     rpm=60,
+        ...     concurrency=4,
+        ...     retry=RetryConfig(),
+        ... )
     """
 
     api_key: str

@@ -27,7 +27,16 @@ class CommandContext:
         logger: Logger instance used by commands.
 
     Example:
-        >>> ctx = CommandContext(config={}, provider=ProviderSettings(api_key="sk-...", model="gpt-5-nano", rpm=60, concurrency=4, retry=RetryConfig()))
+        >>> ctx = CommandContext(
+        ...     config={},
+        ...     provider=ProviderSettings(
+        ...         api_key="sk-...",
+        ...         model="gpt-5-nano",
+        ...         rpm=60,
+        ...         concurrency=4,
+        ...         retry=RetryConfig(),
+        ...     ),
+        ... )
     """
 
     config: dict

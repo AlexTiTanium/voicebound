@@ -40,7 +40,14 @@ class Summary(TypedDict):
         errors: List of keys that failed translation.
 
     Example:
-        >>> summary: Summary = {"translated": 3, "skipped": 1, "loaded": 2, "ignored": 0, "empty": 0, "errors": []}
+        >>> summary: Summary = {
+        ...     "translated": 3,
+        ...     "skipped": 1,
+        ...     "loaded": 2,
+        ...     "ignored": 0,
+        ...     "empty": 0,
+        ...     "errors": [],
+        ... }
     """
 
     translated: int

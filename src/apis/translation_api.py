@@ -60,7 +60,10 @@ class TranslationFilters:
         ignore_pattern: User/config-supplied ignore regex.
 
     Example:
-        >>> filters = TranslationFilters(allowed_pattern=re.compile(r"^chp"), ignore_pattern=re.compile(r"app_name"))
+        >>> filters = TranslationFilters(
+        ...     allowed_pattern=re.compile(r"^chp"),
+        ...     ignore_pattern=re.compile(r"app_name"),
+        ... )
     """
 
     allowed_pattern: re.Pattern[str]
@@ -79,7 +82,12 @@ class TranslationSettings:
         count_tokens_enabled: User/config flag to count tokens.
 
     Example:
-        >>> settings = TranslationSettings(model="gpt-5-nano", target_language="Spanish", dry_run=False, count_tokens_enabled=True)
+        >>> settings = TranslationSettings(
+        ...     model="gpt-5-nano",
+        ...     target_language="Spanish",
+        ...     dry_run=False,
+        ...     count_tokens_enabled=True,
+        ... )
     """
 
     model: str
@@ -99,7 +107,11 @@ class TranslationProgress:
         progress_lock: Lock for safe concurrent updates.
 
     Example:
-        >>> progress = TranslationProgress(done={}, progress_file=Path("progress.json"), progress_lock=Lock())
+        >>> progress = TranslationProgress(
+        ...     done={},
+        ...     progress_file=Path("progress.json"),
+        ...     progress_lock=Lock(),
+        ... )
     """
 
     done: dict[str, str | None]

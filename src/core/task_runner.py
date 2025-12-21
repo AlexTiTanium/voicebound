@@ -127,7 +127,9 @@ class TaskRunner(Generic[T]):
     Shared async runner with rpm-based rate limit, concurrency, and retries.
 
     Example:
-        >>> runner = TaskRunner(RunnerConfig(name="translate", rpm=60, concurrency=4, retry=RetryConfig()))
+        >>> runner = TaskRunner(
+        ...     RunnerConfig(name="translate", rpm=60, concurrency=4, retry=RetryConfig())
+        ... )
     """
 
     def __init__(self, config: RunnerConfig, hooks: TaskHooks[T] | None = None):

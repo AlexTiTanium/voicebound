@@ -57,7 +57,10 @@ class VoiceUtterance(TypedDict):
         voice: Voice metadata describing provider and voice name.
 
     Example:
-        >>> utterance: VoiceUtterance = {"text": "Hello", "voice": {"name": "ivan", "provider": "hume_ai"}}
+        >>> utterance: VoiceUtterance = {
+        ...     "text": "Hello",
+        ...     "voice": {"name": "ivan", "provider": "hume_ai"},
+        ... }
     """
 
     text: str
@@ -76,7 +79,13 @@ class VoicePayload(TypedDict):
         utterances: List of utterance entries to synthesize.
 
     Example:
-        >>> payload: VoicePayload = {"model": "octave", "format": {"type": "mp3"}, "split_utterances": True, "version": "2", "utterances": []}
+        >>> payload: VoicePayload = {
+        ...     "model": "octave",
+        ...     "format": {"type": "mp3"},
+        ...     "split_utterances": True,
+        ...     "version": "2",
+        ...     "utterances": [],
+        ... }
     """
 
     model: str
@@ -104,7 +113,15 @@ class VoiceSettings:
         max_elapsed_seconds: Optional request timeout.
 
     Example:
-        >>> settings = VoiceSettings(model="octave", voice_name="ivan", provider="hume_ai", audio_format="mp3", split_utterances=True, octave_version="2", max_elapsed_seconds=None)
+        >>> settings = VoiceSettings(
+        ...     model="octave",
+        ...     voice_name="ivan",
+        ...     provider="hume_ai",
+        ...     audio_format="mp3",
+        ...     split_utterances=True,
+        ...     octave_version="2",
+        ...     max_elapsed_seconds=None,
+        ... )
     """
 
     model: str
