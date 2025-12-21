@@ -1,15 +1,12 @@
-import time
 from pathlib import Path
-from typing import Any, Dict, Optional, TypedDict
+from typing import Optional, TypedDict
 
 import anyio
-import httpx
 import typer
 from loguru import logger
 
-from core.command_context import run_with_progress
+from apis.voice_api import VoiceService, VoiceSettings
 from core.summary_reporter import SummaryReporter
-from core.task_runner import TaskHooks, TaskSpec
 from utils import (
     compile_regex,
     configure_logging,
@@ -18,83 +15,13 @@ from utils import (
     load_config,
     resolve_path,
 )
-from utils.command_utils import (
-    ProviderSettings,
-    build_runner,
-    build_task_specs,
-    build_voice_worklist,
-    load_progress,
-    load_provider_settings,
-)
-
-API_URL = "https://api.hume.ai/v0/tts/file"
+from utils.command_utils import build_voice_worklist, load_progress, load_provider_settings
 
 
 class VoiceSummary(TypedDict):
     successes: list[str]
     failures: list[str]
     skipped: int
-
-
-def build_payload(
-    text: str,
-    *,
-    model: str,
-    voice_name: str,
-    provider: str,
-    audio_format: str,
-    split_utterances: bool,
-    octave_version: str,
-) -> Dict[str, Any]:
-    """Construct the Hume request payload for one utterance.
-
-    Args:
-        text: Utterance content.
-        model: TTS model name.
-        voice_name: Voice to request.
-        provider: Voice provider identifier.
-        audio_format: Audio format string (e.g., mp3).
-        split_utterances: Whether to split utterances.
-        octave_version: API version to target.
-    """
-    return {
-        "model": model,
-        "format": {"type": audio_format},
-        "split_utterances": split_utterances,
-        "version": octave_version,
-        "utterances": [
-            {
-                "text": text,
-                "voice": {"name": voice_name, "provider": provider},
-            }
-        ],
-    }
-
-
-async def send_request(
-    client: httpx.AsyncClient, headers: Dict[str, str], payload: Dict[str, Any]
-) -> httpx.Response:
-    """POST to Hume TTS endpoint using an async client."""
-    return await client.post(API_URL, headers=headers, json=payload, timeout=120)
-
-
-async def synthesize_once(
-    *,
-    client: httpx.AsyncClient,
-    headers: Dict[str, str],
-    payload: Dict[str, Any],
-    out_path: Path,
-    max_elapsed_seconds: float | None,
-) -> Path:
-    """Send one synthesis request and persist the audio file."""
-    start = time.perf_counter()
-    response = await send_request(client, headers, payload)
-    if response.status_code != 200:
-        raise RuntimeError(f"HTTP {response.status_code}: {response.text}")
-    if max_elapsed_seconds is not None and (time.perf_counter() - start) > max_elapsed_seconds:
-        raise TimeoutError(f"max elapsed {max_elapsed_seconds}s exceeded")
-    await anyio.to_thread.run_sync(out_path.write_bytes, response.content)
-    return out_path
 
 
 def generate_voice(
@@ -131,7 +58,6 @@ def generate_voice(
     )
     provider = provider or voice_cfg.get("provider", "HUME_AI")
     voice_name = get_config_value(config, "hume_ai", "voice_name", required=False, default="ivan")
-    _target_language = target_language or voice_cfg.get("target_language", "Russian")
     split_utterances = hume_cfg.get("split_utterances", True)
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
@@ -217,68 +143,28 @@ async def _run_voice_async(
     split_utterances: bool,
     octave_version: str,
     max_elapsed_seconds: float | None,
-    provider_settings: ProviderSettings,
+    provider_settings,
     summary: SummaryReporter,
     skipped_count: int,
 ) -> list[tuple[str, str]]:
-    """Execute Hume synthesis tasks via TaskRunner."""
-    results: list[tuple[str, str]] = []
-
-    runner = build_runner("voice", provider_settings, TaskHooks())
-    work_items: list[tuple[str, Any]] = []
-    async with httpx.AsyncClient() as client:
-        for key, text in worklist:
-            out_path = output_dir / f"{key}.{audio_format}"
-            payload = build_payload(
-                text,
-                model=model,
-                voice_name=voice_name,
-                provider=provider,
-                audio_format=audio_format,
-                split_utterances=split_utterances,
-                octave_version=octave_version,
-            )
-
-            async def coro(payload=payload, out_path=out_path):
-                return await synthesize_once(
-                    client=client,
-                    headers=headers,
-                    payload=payload,
-                    out_path=out_path,
-                    max_elapsed_seconds=max_elapsed_seconds,
-                )
-
-            work_items.append((key, coro))
-
-        def success_cb(spec: TaskSpec, _result: Path) -> None:
-            results.append((spec.task_id, "ok"))
-            summary.record_success(spec.task_id)
-
-        def failure_cb(spec: TaskSpec, exc: BaseException) -> None:
-            logger.error(f"[VOICE] {spec.task_id} failed: {exc}")
-            results.append((spec.task_id, "error"))
-            summary.record_failure(spec.task_id, exc)
-
-        def retry_cb(spec: TaskSpec, attempt: int, sleep_for: float | None) -> None:
-            sleep_desc = f"{sleep_for:.2f}s" if sleep_for is not None else "unknown"
-            logger.warning(
-                f"[VOICE] {spec.task_id} retry {attempt}/{provider_settings.retry.attempts} "
-                f"(sleep {sleep_desc})"
-            )
-
-        await run_with_progress(
-            "voice",
-            len(work_items),
-            runner,
-            build_task_specs(work_items),
-            summary,
-            success_cb=success_cb,
-            failure_cb=failure_cb,
-            retry_cb=retry_cb,
-        )
-
-    summary.skipped = skipped_count
-    return results
+    voice_settings = VoiceSettings(
+        model=model,
+        voice_name=voice_name,
+        provider=provider,
+        audio_format=audio_format,
+        split_utterances=split_utterances,
+        octave_version=octave_version,
+        max_elapsed_seconds=max_elapsed_seconds,
+    )
+    service = VoiceService(provider_settings=provider_settings)
+    return await service.run_voice_async(
+        worklist,
+        headers=headers,
+        output_dir=output_dir,
+        settings=voice_settings,
+        summary=summary,
+        skipped_count=skipped_count,
+    )
 
 
 def typer_command(
