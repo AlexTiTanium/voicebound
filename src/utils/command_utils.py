@@ -5,7 +5,18 @@ import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Iterable, Optional, TypeVar, Mapping, TYPE_CHECKING, TypeAlias, cast
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Awaitable,
+    Callable,
+    Iterable,
+    Mapping,
+    Optional,
+    TypeAlias,
+    TypeVar,
+    cast,
+)
 
 from loguru import logger
 from rich.progress import (

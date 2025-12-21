@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from inspect import iscoroutine
-from typing import Any, Awaitable, Callable, Iterable, Optional, TypeVar, Generic
+from typing import Any, Awaitable, Callable, Generic, Iterable, Optional, TypeVar
 
 import anyio
 from aiolimiter import AsyncLimiter

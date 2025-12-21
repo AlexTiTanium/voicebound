@@ -9,9 +9,8 @@ from threading import Lock
 from typing import TYPE_CHECKING, Awaitable, Callable, Iterable, Literal, Protocol
 from xml.etree.ElementTree import Element
 
-import anyio
-from anyio import to_thread
 import tiktoken
+from anyio import to_thread
 from loguru import logger
 
 from core.command_context import run_with_progress
@@ -20,6 +19,7 @@ from utils.command_utils import ProviderSettings, build_runner, build_task_specs
 
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
+
 
 class TokenEncoder(Protocol):
     def encode(self, text: str) -> list[int]:

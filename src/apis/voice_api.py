@@ -3,17 +3,18 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Awaitable, Callable, TypedDict, Literal
+from typing import TYPE_CHECKING, Awaitable, Callable, Literal, TypedDict
 
-import anyio
-from anyio import to_thread
 import httpx
+from anyio import to_thread
 from loguru import logger
 
 from core.command_context import run_with_progress
-from core.summary_reporter import SummaryReporter
 from core.task_runner import TaskHooks, TaskSpec
 from utils.command_utils import ProviderSettings, build_runner, build_task_specs, log_retry
+
+if TYPE_CHECKING:
+    from core.summary_reporter import SummaryReporter
 
 API_URL = "https://api.hume.ai/v0/tts/file"
 

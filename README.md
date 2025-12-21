@@ -16,12 +16,13 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 ## Configuration
 - Start from the sample: `cp config.example.toml config.toml` and add your API keys (do not commit secrets).
 - Required keys: `[openai].api_key` for translation, `[hume_ai].api_key` for voice.
+- Config resolution order: `--config-path` > `VOICEBOUND_CONFIG` > `./config.toml` > `~/.config/voicebound/config.toml`.
 
 ## CLI usage
 - Global flags: `--config-path/-c`, `--log-level/-l`, `--no-color`, `--version`.
 - Translate (OpenAI):
   - `voicebound translate --input-file strings.xml --output-file out/values/strings.xml`
-  - Common overrides: `--allowed-regex "^keep"`, `--ignore-regex "skip"`, `--dry-run` (estimates tokens only), `--target-language "Spanish"`.
+  - Common overrides: `--allowed-regex "^keep"`, `--ignore-regex "skip"`, `--dry-run` (estimates tokens only), `--target-language "Spanish"`, `--max-workers 10`.
 - Voice (Hume):
   - `voicebound voice --input-file .cache/progress.json --output-dir out/hume`
   - Common overrides: `--allowed-regex "^keep"`, `--ignore-regex "skip"`, `--stop-after 10`, `--audio-format wav`, `--provider HUME_AI`.
@@ -30,7 +31,7 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 ## Project layout
 - CLI entrypoint: `src/cli.py` (console script `voicebound`).
 - Commands: `src/commands/ai_translate.py`, `src/commands/ai_voice.py`.
-- Shared helpers: `src/utils.py`.
+- Shared helpers: `src/utils/__init__.py`, `src/utils/command_utils.py`.
 
 ## Tests
 - Run unit/integration suite: `uv run pytest`
