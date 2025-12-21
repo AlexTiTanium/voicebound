@@ -1,6 +1,5 @@
 import importlib.metadata
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -27,13 +26,13 @@ def version_callback(value: bool):
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    config_path: Optional[Path] = typer.Option(
+    config_path: Path | None = typer.Option(
         None,
         "--config-path",
         "-c",
         help="Path to config.toml (env VOICEBOUND_CONFIG or defaults if omitted).",
     ),
-    log_level: Optional[str] = typer.Option(
+    log_level: str | None = typer.Option(
         None, "--log-level", "-l", help="Log level (DEBUG, INFO, WARNING, ERROR)."
     ),
     no_color: bool = typer.Option(False, "--no-color", help="Disable colored log output."),

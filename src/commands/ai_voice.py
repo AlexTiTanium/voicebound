@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import anyio
 import typer
@@ -182,21 +182,19 @@ async def _run_voice_async(
 
 def typer_command(
     ctx: typer.Context,
-    input_file: Optional[Path] = typer.Option(None, help="Path to cached progress JSON."),
-    output_dir: Optional[Path] = typer.Option(None, help="Directory to write audio files."),
-    provider: Optional[str] = typer.Option(None, help="Voice provider identifier."),
-    target_language: Optional[str] = typer.Option(
+    input_file: Path | None = typer.Option(None, help="Path to cached progress JSON."),
+    output_dir: Path | None = typer.Option(None, help="Directory to write audio files."),
+    provider: str | None = typer.Option(None, help="Voice provider identifier."),
+    target_language: str | None = typer.Option(
         None, help="Target language for voice content (metadata only)."
     ),
-    allowed_regex: Optional[str] = typer.Option(
-        None, help="Only process keys matching this regex."
-    ),
-    ignore_regex: Optional[str] = typer.Option(None, help="Skip keys matching this regex."),
-    stop_after: Optional[int] = typer.Option(None, help="Stop after N items (0 for no limit)."),
-    audio_format: Optional[str] = typer.Option(
+    allowed_regex: str | None = typer.Option(None, help="Only process keys matching this regex."),
+    ignore_regex: str | None = typer.Option(None, help="Skip keys matching this regex."),
+    stop_after: int | None = typer.Option(None, help="Stop after N items (0 for no limit)."),
+    audio_format: str | None = typer.Option(
         None, help="Audio format extension and API format type."
     ),
-    config_path: Optional[Path] = typer.Option(None, help="Path to config.toml."),
+    config_path: Path | None = typer.Option(None, help="Path to config.toml."),
 ) -> None:
     """Typer-friendly CLI wrapper for generate_voice."""
     obj = ctx.ensure_object(dict)

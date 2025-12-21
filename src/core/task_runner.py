@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from inspect import iscoroutine
-from typing import Any, Awaitable, Callable, Generic, Iterable, Optional, TypeVar
+from typing import Any, Awaitable, Callable, Generic, Iterable, TypeVar
 
 import anyio
 from aiolimiter import AsyncLimiter
@@ -54,9 +54,9 @@ class TaskOutcome(Generic[T]):
 
 @dataclass
 class TaskHooks(Generic[T]):
-    on_success: Optional[Callable[[TaskSpec[T], T], Awaitable[None] | None]] = None
-    on_failure: Optional[Callable[[TaskSpec[T], BaseException], Awaitable[None] | None]] = None
-    on_retry: Optional[Callable[[TaskSpec[T], int, float | None], None]] = None
+    on_success: Callable[[TaskSpec[T], T], Awaitable[None] | None] | None = None
+    on_failure: Callable[[TaskSpec[T], BaseException], Awaitable[None] | None] | None = None
+    on_retry: Callable[[TaskSpec[T], int, float | None], None] | None = None
 
 
 class TaskRunner(Generic[T]):

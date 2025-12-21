@@ -1,6 +1,6 @@
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, Optional, TypedDict
+from typing import Iterable, TypedDict
 
 import anyio
 import typer
@@ -187,17 +187,17 @@ def _print_dry_run(results: Iterable[TranslationResult]) -> None:
 
 def typer_command(
     ctx: typer.Context,
-    input_file: Optional[Path] = typer.Option(None, help="Path to the input strings.xml."),
-    output_file: Optional[Path] = typer.Option(None, help="Path to write translated XML."),
-    allowed_regex: Optional[str] = typer.Option(
+    input_file: Path | None = typer.Option(None, help="Path to the input strings.xml."),
+    output_file: Path | None = typer.Option(None, help="Path to write translated XML."),
+    allowed_regex: str | None = typer.Option(
         None, help="Translate only entries matching this regex."
     ),
-    ignore_regex: Optional[str] = typer.Option(None, help="Ignore entries matching this regex."),
-    dry_run: Optional[bool] = typer.Option(None, help="Dry run (no translation calls)."),
-    max_workers: Optional[int] = typer.Option(None, help="Parallel workers."),
-    model: Optional[str] = typer.Option(None, help="OpenAI model to use."),
-    target_language: Optional[str] = typer.Option(None, help="Target language to translate into."),
-    config_path: Optional[Path] = typer.Option(None, help="Path to config.toml."),
+    ignore_regex: str | None = typer.Option(None, help="Ignore entries matching this regex."),
+    dry_run: bool | None = typer.Option(None, help="Dry run (no translation calls)."),
+    max_workers: int | None = typer.Option(None, help="Parallel workers."),
+    model: str | None = typer.Option(None, help="OpenAI model to use."),
+    target_language: str | None = typer.Option(None, help="Target language to translate into."),
+    config_path: Path | None = typer.Option(None, help="Path to config.toml."),
 ) -> None:
     """Typer CLI wrapper for translate_strings."""
     obj = ctx.ensure_object(dict)

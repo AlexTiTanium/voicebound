@@ -12,7 +12,6 @@ from typing import (
     Callable,
     Iterable,
     Mapping,
-    Optional,
     TypeAlias,
     TypeVar,
     cast,
@@ -73,7 +72,7 @@ def load_provider_settings(
     provider_key: str,
     default_model: str,
     default_rpm: int,
-    concurrency_override: Optional[int] = None,
+    concurrency_override: int | None = None,
 ) -> ProviderSettings:
     provider_cfg = config.get(provider_key, {})
     api_key = get_config_value(config, provider_key, "api_key")
