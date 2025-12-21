@@ -199,8 +199,13 @@ class TranslationService:
         """
         pre_results: list[TranslationResult] = []
         translate_nodes: list[Element] = []
+        seen_names: set[str] = set()
         for node in nodes:
             name = node.get("name") or ""
+            if name in seen_names:
+                logger.debug(f"[SKIP] Duplicate key encountered; skipping extra node: {name}")
+                continue
+            seen_names.add(name)
             original = (node.text or "").strip()
             matches_regex = bool(filters.allowed_pattern.match(name))
 

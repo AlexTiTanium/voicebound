@@ -189,23 +189,27 @@ def translate_strings(
             if isinstance(status, str):
                 summary.record_translation(status, name)
 
-        async def _run_translate() -> list[TranslationResult]:
-            """
-            Execute the async translation task runner.
+        if translate_nodes:
+            async def _run_translate() -> list[TranslationResult]:
+                """
+                Execute the async translation task runner.
 
-            Returns:
-                A list of TranslationResult tuples from the provider tasks.
-            """
-            return await service.translate_nodes_async(
-                translate_nodes,
-                filters=translation_filters,
-                progress=translation_progress,
-                settings=translation_settings,
-                summary=summary,
-            )
+                Returns:
+                    A list of TranslationResult tuples from the provider tasks.
+                """
+                return await service.translate_nodes_async(
+                    translate_nodes,
+                    filters=translation_filters,
+                    progress=translation_progress,
+                    settings=translation_settings,
+                    summary=summary,
+                )
 
-        results = anyio.run(_run_translate)
-        results = pre_results + results
+            results = anyio.run(_run_translate)
+            results = pre_results + results
+        else:
+            summary.log_translation(str(progress_file))
+            results = pre_results
     except KeyboardInterrupt:
         logger.warning("[TRANSLATE] Interrupted by user.")
         raise SystemExit(130)

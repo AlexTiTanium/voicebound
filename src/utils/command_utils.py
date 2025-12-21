@@ -283,6 +283,12 @@ def persist_progress(path: Path, data: Any) -> None:
         path: Path to the JSON file.
         data: Data to serialize.
     """
+    if isinstance(data, Mapping):
+        existing = load_json(path, default=None)
+        if isinstance(existing, Mapping):
+            merged = dict(existing)
+            merged.update(data)
+            data = merged
     write_json(path, data)
 
 

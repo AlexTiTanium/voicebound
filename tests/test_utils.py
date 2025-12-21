@@ -4,6 +4,7 @@ import pytest
 from loguru import logger
 
 import utils
+from utils.command_utils import persist_progress
 
 
 def test_load_config_and_get_value(tmp_path: Path):
@@ -44,6 +45,13 @@ def test_write_and_load_json(tmp_path: Path):
     loaded = utils.load_json(path)
     assert loaded == {"a": 1}
     assert utils.load_json(tmp_path / "missing.json", default={}) == {}
+
+def test_persist_progress_merges_existing(tmp_path: Path):
+    path = tmp_path / "progress.json"
+    utils.write_json(path, {"a": "one", "b": "two"})
+    persist_progress(path, {"b": "two_new", "c": "three"})
+    loaded = utils.load_json(path)
+    assert loaded == {"a": "one", "b": "two_new", "c": "three"}
 
 
 def test_configure_logging_replaces_handlers(capsys):

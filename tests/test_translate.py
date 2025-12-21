@@ -139,7 +139,7 @@ def test_translate_respects_config_and_filters(tmp_path, monkeypatch):
         openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
     )
 
-    output_file = tmp_path / "out/values/strings.xml"
+    output_file = tmp_path / "strings.out.xml"
 
     ai_translate.translate_strings(
         config_path=config_path,
@@ -170,7 +170,7 @@ def test_translate_dry_run_does_not_write(monkeypatch, tmp_path):
         openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
     )
 
-    output_file = tmp_path / "out/values/strings.xml"
+    output_file = tmp_path / "strings.out.xml"
 
     ai_translate.translate_strings(
         config_path=config_path,
@@ -205,7 +205,7 @@ def test_translate_uses_cache_and_skips_api(monkeypatch, tmp_path):
         openai_provider.OpenAITranslationProvider, "translate_text", _translate_text
     )
 
-    output_file = tmp_path / "out/values/strings.xml"
+    output_file = tmp_path / "strings.out.xml"
 
     ai_translate.translate_strings(
         config_path=config_path,
@@ -218,6 +218,56 @@ def test_translate_uses_cache_and_skips_api(monkeypatch, tmp_path):
     assert "Cached text" in text
     # Only one uncached item should invoke translation
     assert call_count["count"] == 1
+
+
+def test_translate_skips_runner_when_all_cached(monkeypatch, tmp_path):
+    config_path = write_config(tmp_path)
+    write_strings(tmp_path)
+
+    progress = tmp_path / ".cache/progress.json"
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    progress.write_text(
+        '{"keep_one": "Cached one", "keep_two": "Cached two"}',
+        encoding="utf-8",
+    )
+
+    async def _fail_translate_nodes_async(*args, **kwargs):
+        raise AssertionError("translate_nodes_async should not run when all items are cached")
+
+    def _translate_text(self, text, model, target_language):
+        raise AssertionError("translate_text should not be called when all items are cached")
+
+    monkeypatch.setattr(
+        translation_api.TranslationService,
+        "translate_nodes_async",
+        _fail_translate_nodes_async,
+    )
+    monkeypatch.setattr(
+        openai_provider.OpenAITranslationProvider, "translate_text", _translate_text
+    )
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
+
+    output_file = tmp_path / "strings.out.xml"
+
+    ai_translate.translate_strings(
+        config_path=config_path,
+        input_file=tmp_path / "strings.xml",
+        output_file=output_file,
+        progress_file=progress,
+    )
+
+    text = output_file.read_text(encoding="utf-8")
+    assert "Cached one" in text
+    assert "Cached two" in text
+
+
+def test_allowed_regex_matches_chp1_and_chp1a():
+    pattern = re.compile(r"(?i)^chp1(?:[a-z])?_.*")
+    assert pattern.match("chp1_17_16__a")
+    assert pattern.match("chp1a_17_16__a")
+    assert not pattern.match("chp10_0_1__a")
 
 
 def test_translate_handles_empty_and_dry_run_branch(monkeypatch, tmp_path):
@@ -333,7 +383,8 @@ def test_translate_keyboard_interrupt(monkeypatch, tmp_path):
         ai_translate.translate_strings(
             config_path=config_path,
             input_file=tmp_path / "strings.xml",
-            output_file=tmp_path / "out/values/strings.xml",
+            output_file=tmp_path / "strings.out.xml",
+            progress_file=tmp_path / "progress.json",
         )
 
 
