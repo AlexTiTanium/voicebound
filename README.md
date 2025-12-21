@@ -8,11 +8,10 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 
 ## Quickstart
 - Ensure Python 3.10+ is installed.
-- Install (editable, recommended during development): `pip install -e .`
-- Run translate: `voicebound translate --input-file strings.xml --config-path config.toml`
-- Run voice: `voicebound voice --config-path config.toml`
-- Need isolation? Use the helper: `./install.sh` (creates/activates `venv`).
-- Pipx-friendly install: `pipx install .` (or `pipx install git+https://...`); binary name is `voicebound`.
+- Install uv: https://docs.astral.sh/uv/
+- Create the environment and install deps: `uv sync --dev`
+- Run translate: `uv run voicebound translate --input-file strings.xml --config-path config.toml`
+- Run voice: `uv run voicebound voice --config-path config.toml`
 
 ## Configuration
 - Start from the sample: `cp config.example.toml config.toml` and add your API keys (do not commit secrets).
@@ -34,13 +33,13 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 - Shared helpers: `src/utils.py`.
 
 ## Tests
-- Install deps: `./venv/bin/pip install -r requirements.txt` (or `pip install -r requirements.txt` inside your env).
-- Run unit/integration suite: `pytest` (or `./venv/bin/pytest`).
-- Coverage locally: `pytest --cov=src`.
+- Run unit/integration suite: `uv run pytest`
+- Coverage locally: `uv run pytest --cov=src`
 
 ## Lint/format
-- Ruff lint: `ruff check .`
-- Ruff format: `ruff format .`
+- Ruff lint: `uv run ruff check .`
+- Ruff format: `uv run ruff format .`
+- Mypy: `uv run mypy --config-file pyproject.toml src tests`
 
 ## Troubleshooting
 - “Config not found”: verify `--config-path` or `VOICEBOUND_CONFIG` and that `config.toml` exists.
