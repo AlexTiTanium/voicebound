@@ -352,25 +352,34 @@ class TranslationService:
         work_items: list[tuple[str, Callable[[], Awaitable[TranslationResult]]]] = []
         for idx, node in enumerate(nodes):
             task_name = node.get("name") or f"string-{idx}"
-            task_fn = functools.partial(
-                self._process_node,
-                node,
-                filters=filters,
-                progress=progress,
-                settings=settings,
-                encoding=encoding,
-            )
+            def task_fn(
+                node: Element = node,
+                filters: TranslationFilters = filters,
+                progress: TranslationProgress = progress,
+                settings: TranslationSettings = settings,
+                encoding: TokenEncoder | None = encoding,
+            ) -> TranslationResult:
+                return self._process_node(
+                    node,
+                    filters=filters,
+                    progress=progress,
+                    settings=settings,
+                    encoding=encoding,
+                )
 
-            async def coro(task_fn: Callable[[], TranslationResult] = task_fn) -> TranslationResult:
-                """
-                Run the synchronous node translation in a worker thread.
+            def make_coro(fn: Callable[[], TranslationResult]) -> Callable[[], Awaitable[TranslationResult]]:
+                async def coro() -> TranslationResult:
+                    """
+                    Run the synchronous node translation in a worker thread.
 
-                Returns:
-                    A TranslationResult tuple for the node.
-                """
-                return await to_thread.run_sync(task_fn)
+                    Returns:
+                        A TranslationResult tuple for the node.
+                    """
+                    return await to_thread.run_sync(fn)
 
-            work_items.append((task_name, coro))
+                return coro
+
+            work_items.append((task_name, make_coro(task_fn)))
 
         specs = build_task_specs(work_items)
 
