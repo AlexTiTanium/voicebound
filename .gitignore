@@ -44,6 +44,3 @@ coverage.xml
 
 # uv cache
 .uv-cache/
-
-# Mypy cache
-.mypy_cache/
