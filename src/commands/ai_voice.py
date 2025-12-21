@@ -8,14 +8,6 @@ import typer
 from loguru import logger
 
 from command_context import run_with_progress
-from command_utils import (
-    ProviderSettings,
-    build_runner,
-    build_task_specs,
-    build_voice_worklist,
-    load_progress,
-    load_provider_settings,
-)
 from summary_reporter import SummaryReporter
 from task_runner import TaskHooks, TaskSpec
 from utils import (
@@ -25,6 +17,14 @@ from utils import (
     get_config_value,
     load_config,
     resolve_path,
+)
+from utils.command_utils import (
+    ProviderSettings,
+    build_runner,
+    build_task_specs,
+    build_voice_worklist,
+    load_progress,
+    load_provider_settings,
 )
 
 API_URL = "https://api.hume.ai/v0/tts/file"

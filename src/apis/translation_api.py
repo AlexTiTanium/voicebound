@@ -13,8 +13,8 @@ import tiktoken
 from loguru import logger
 
 from command_context import run_with_progress
-from command_utils import ProviderSettings, build_runner, build_task_specs, persist_progress
 from task_runner import TaskHooks, TaskSpec
+from utils.command_utils import ProviderSettings, build_runner, build_task_specs, persist_progress
 
 if TYPE_CHECKING:
     from summary_reporter import SummaryReporter

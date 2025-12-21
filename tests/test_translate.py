@@ -8,7 +8,7 @@ from xml.etree import ElementTree as ET
 import pytest
 import typer
 
-import translation_api
+from apis import translation_api
 from commands import ai_translate
 
 

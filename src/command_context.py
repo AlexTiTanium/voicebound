@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Any, Awaitable, Callable, Iterable, Sequence
 
 from loguru import logger
 
-from command_utils import ProgressReporter, ProviderSettings, load_provider_settings
 from task_runner import TaskHooks, TaskRunner, TaskSpec
 from utils import configure_logging, load_config
+from utils.command_utils import ProgressReporter, ProviderSettings, load_provider_settings
 
 if TYPE_CHECKING:
     from summary_reporter import SummaryReporter

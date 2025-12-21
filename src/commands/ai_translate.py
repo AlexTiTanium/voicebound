@@ -7,15 +7,14 @@ import typer
 from loguru import logger
 from openai import OpenAI
 
-from command_context import CommandContext, make_command_context
-from command_utils import load_progress, load_strings
-from summary_reporter import SummaryReporter
-from translation_api import (
+from apis.translation_api import (
     TranslationFilters,
     TranslationProgress,
     TranslationService,
     TranslationSettings,
 )
+from command_context import CommandContext, make_command_context
+from summary_reporter import SummaryReporter
 from utils import (
     PROJECT_ROOT,
     compile_regex,
@@ -23,6 +22,7 @@ from utils import (
     get_config_value,
     resolve_path,
 )
+from utils.command_utils import load_progress, load_strings
 
 
 class Summary(TypedDict):
