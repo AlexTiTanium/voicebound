@@ -20,13 +20,13 @@ class HumeVoiceProvider:
     default_rpm: int = 10
     api_url: str = API_URL
 
-    def build_headers(self, settings: "ProviderSettings") -> dict[str, str]:
+    def build_headers(self, settings: ProviderSettings) -> dict[str, str]:
         return {
             "Content-Type": "application/json",
             "X-Hume-Api-Key": settings.api_key,
         }
 
-    def build_payload(self, text: str, *, settings: "VoiceSettings") -> "VoicePayload":
+    def build_payload(self, text: str, *, settings: VoiceSettings) -> VoicePayload:
         return {
             "model": settings.model,
             "format": {"type": settings.audio_format},
@@ -42,8 +42,8 @@ class HumeVoiceProvider:
 
     async def send_request(
         self,
-        client: "httpx.AsyncClient",
+        client: httpx.AsyncClient,
         headers: dict[str, str],
-        payload: "VoicePayload",
-    ) -> "httpx.Response":
+        payload: VoicePayload,
+    ) -> httpx.Response:
         return await client.post(self.api_url, headers=headers, json=payload, timeout=120)

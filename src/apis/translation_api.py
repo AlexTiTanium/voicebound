@@ -71,7 +71,7 @@ class TranslationService:
     """Reusable translation API for string resources."""
 
     def __init__(
-        self, provider: "TranslationProvider", provider_settings: ProviderSettings | None = None
+        self, provider: TranslationProvider, provider_settings: ProviderSettings | None = None
     ):
         self._provider = provider
         self._provider_settings = provider_settings
@@ -248,7 +248,7 @@ def process_string(
     ignore_pattern: re.Pattern[str],
     done: dict[str, str | None],
     progress_lock: Lock,
-    provider: "TranslationProvider",
+    provider: TranslationProvider,
     progress_file: Path,
     model: str,
     dry_run: bool,

@@ -16,7 +16,7 @@ class TranslationProviderInfo:
     name: str
     default_model: str
     default_rpm: int
-    factory: Callable[[str], "TranslationProvider"]
+    factory: Callable[[str], TranslationProvider]
 
 
 @dataclass(frozen=True)
@@ -25,7 +25,7 @@ class VoiceProviderInfo:
     name: str
     default_model: str
     default_rpm: int
-    factory: Callable[[], "VoiceProvider"]
+    factory: Callable[[], VoiceProvider]
 
 
 _TRANSLATION_PROVIDERS: dict[str, TranslationProviderInfo] = {

@@ -58,7 +58,7 @@ class VoiceService:
     """Reusable voice synthesis API for cached translations."""
 
     def __init__(
-        self, provider: "VoiceProvider", provider_settings: ProviderSettings | None = None
+        self, provider: VoiceProvider, provider_settings: ProviderSettings | None = None
     ):
         self._provider = provider
         self._provider_settings = provider_settings

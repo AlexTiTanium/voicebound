@@ -202,7 +202,7 @@ class ProgressReporter:
         )
         self._task_id: TaskID | None = None
 
-    def __enter__(self) -> "ProgressReporter":
+    def __enter__(self) -> ProgressReporter:
         self._task_id = self._progress.add_task(self.description, total=self.total)
         self._progress.__enter__()
         return self
