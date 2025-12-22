@@ -23,9 +23,9 @@ backoff_max = 8
 jitter = true
 
 [translate]
-input_file = "strings.xml"
-output_file = "out/values/strings.xml"
-progress_file = ".cache/progress.json"
+input_file = "project.strings.xml"
+output_file = "project/values/strings.xml"
+progress_file = ".cache/project_progress.json"
 allowed_regex = "^chp10_"
 ignore_regex = ""
 dry_run = false
@@ -34,8 +34,8 @@ target_language = "Russian"
 provider = "openai"
 
 [voice]
-input_file = ".cache/progress.json"
-output_dir = "out/hume"
+input_file = ".cache/project_progress.json"
+output_dir = "project/hume"
 allowed_regex = "^chp"
 ignore_regex = ""
 stop_after = 0
