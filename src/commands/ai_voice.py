@@ -43,6 +43,31 @@ class VoiceSummary(TypedDict):
     skipped: int
 
 
+class VoiceDryRunSummary(TypedDict):
+    """
+    Summary of estimated voice generation cost for dry runs.
+
+    Attributes:
+        total_chars: Total characters in the worklist.
+        free_chars: Characters included in the current free allotment.
+        billable_chars: Characters beyond the included amount.
+        rate_per_1k: Price per 1,000 characters.
+        estimated_cost: Estimated cost in the configured currency.
+        currency: Currency code for display.
+    """
+
+    total_chars: int
+    free_chars: int
+    billable_chars: int
+    rate_per_1k: float
+    estimated_cost: float
+    currency: str
+
+
+VOICE_PRICING_DEFAULT_FREE_CHARS = 0
+VOICE_PRICING_DEFAULT_RATE = 0.15
+
+
 def generate_voice(
     input_file: Path | None = None,
     output_dir: Path | None = None,
@@ -57,6 +82,7 @@ def generate_voice(
     log_level: str | None = None,
     color: bool = True,
     max_elapsed_seconds: float | None = None,
+    dry_run: bool | None = None,
 ) -> None:
     """
     Generate voice files from cached translations using configured provider.
@@ -80,6 +106,7 @@ def generate_voice(
         log_level: Logging verbosity.
         color: Enable colored logging.
         max_elapsed_seconds: Timeout for each generation request.
+        dry_run: When True, only estimate costs and do not call the provider.
     """
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
@@ -116,6 +143,7 @@ def generate_voice(
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
     stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after
     octave_version = provider_cfg.get("octave_version", "2")
+    dry_run = voice_cfg.get("dry_run", False) if dry_run is None else dry_run
     max_elapsed_seconds = (
         max_elapsed_seconds
         if max_elapsed_seconds is not None
@@ -152,6 +180,33 @@ def generate_voice(
     if not worklist:
         logger.info("[VOICE] Nothing to process.")
         return
+    if dry_run:
+        free_chars = int(
+            provider_cfg.get(
+                "pricing_free_chars",
+                voice_cfg.get("pricing_free_chars", VOICE_PRICING_DEFAULT_FREE_CHARS),
+            )
+        )
+        rate_per_1k = float(
+            provider_cfg.get(
+                "pricing_rate_per_1k",
+                voice_cfg.get("pricing_rate_per_1k", VOICE_PRICING_DEFAULT_RATE),
+            )
+        )
+        currency = str(
+            provider_cfg.get("pricing_currency", voice_cfg.get("pricing_currency", "USD"))
+        )
+        if octave_version != "2":
+            logger.warning(
+                "[VOICE] Default pricing assumes Octave 2; override pricing values if needed."
+            )
+        _print_voice_dry_run(
+            worklist,
+            free_chars=free_chars,
+            rate_per_1k=rate_per_1k,
+            currency=currency,
+        )
+        return
     summary: VoiceSummary = {"successes": [], "failures": [], "skipped": len(existing_outputs)}
     try:
         voice_summary = SummaryReporter("voice")
@@ -178,6 +233,51 @@ def generate_voice(
     voice_summary.log_voice(
         voice_summary.successes_list, voice_summary.failures, summary["skipped"]
     )
+
+
+def _summarize_voice_dry_run(
+    worklist: list[tuple[str, str]],
+    *,
+    free_chars: int,
+    rate_per_1k: float,
+    currency: str,
+) -> VoiceDryRunSummary:
+    total_chars = sum(len(text) for _, text in worklist)
+    billable_chars = max(0, total_chars - max(free_chars, 0))
+    estimated_cost = (billable_chars / 1000.0) * max(rate_per_1k, 0.0)
+    return {
+        "total_chars": total_chars,
+        "free_chars": max(free_chars, 0),
+        "billable_chars": billable_chars,
+        "rate_per_1k": max(rate_per_1k, 0.0),
+        "estimated_cost": estimated_cost,
+        "currency": currency,
+    }
+
+
+def _print_voice_dry_run(
+    worklist: list[tuple[str, str]],
+    *,
+    free_chars: int,
+    rate_per_1k: float,
+    currency: str,
+) -> None:
+    for key, text in worklist:
+        preview = text[:80].replace("\n", " ")
+        logger.info(f"[DRY] {key}: {len(text)} chars -> '{preview}...'")
+    summary = _summarize_voice_dry_run(
+        worklist,
+        free_chars=free_chars,
+        rate_per_1k=rate_per_1k,
+        currency=currency,
+    )
+    logger.info("=== SUMMARY ===")
+    logger.info(f"Total characters: {summary['total_chars']}")
+    logger.info(f"Free characters: {summary['free_chars']}")
+    logger.info(f"Billable characters: {summary['billable_chars']}")
+    logger.info(f"Rate per 1,000 characters: {summary['rate_per_1k']} {summary['currency']}")
+    logger.info(f"Estimated cost: {summary['estimated_cost']:.4f} {summary['currency']}")
+    logger.info("No voice generation performed (dry-run mode).")
 
 
 async def _run_voice_async(
@@ -250,6 +350,7 @@ def typer_command(
         None, help="Audio format extension and API format type."
     ),
     config_path: Path | None = typer.Option(None, help="Path to config.toml."),
+    dry_run: bool | None = typer.Option(None, help="Dry run (no voice generation)."),
 ) -> None:
     """Typer-friendly CLI wrapper for generate_voice."""
     obj = ctx.ensure_object(dict)
@@ -269,6 +370,7 @@ def typer_command(
         config_path=cfg_path,
         log_level=log_level,
         color=color,
+        dry_run=dry_run,
     )
 
 

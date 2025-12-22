@@ -12,6 +12,9 @@ octave_version = "2"
 split_utterances = true
 rpm = 75
 concurrency = 4
+pricing_tier = "creator"
+pricing_free_chars = 140000
+pricing_rate_per_1k = 0.15
 
 [retry]
 attempts = 4
@@ -43,3 +46,4 @@ target_language = "Russian"
 provider = "HUME_AI"
 api_provider = "hume_ai"
 max_elapsed_seconds = 600
+dry_run = false

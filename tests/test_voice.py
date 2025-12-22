@@ -113,6 +113,42 @@ def test_voice_filters_and_invokes_runner(monkeypatch, tmp_path, stub_runner):
     assert "other" not in keys
 
 
+def test_voice_dry_run_skips_runner(monkeypatch, tmp_path):
+    config_path = write_config(tmp_path)
+    progress = write_progress(tmp_path)
+    called = {}
+
+    async def _fail(*_args, **_kwargs):
+        called["ran"] = True
+
+    monkeypatch.setattr(ai_voice, "_run_voice_async", _fail)
+
+    ai_voice.generate_voice(
+        config_path=config_path,
+        input_file=progress,
+        output_dir=tmp_path / "tmp-output/hume",
+        allowed_regex="^keep",
+        dry_run=True,
+    )
+
+    assert "ran" not in called
+
+
+def test_voice_dry_run_summary_counts():
+    worklist = [("a", "Hi"), ("b", "Hola")]
+    summary = ai_voice._summarize_voice_dry_run(
+        worklist,
+        free_chars=3,
+        rate_per_1k=0.1,
+        currency="USD",
+    )
+    assert summary["total_chars"] == 6
+    assert summary["free_chars"] == 3
+    assert summary["billable_chars"] == 3
+    assert summary["rate_per_1k"] == 0.1
+    assert summary["estimated_cost"] == pytest.approx(0.0003)
+
+
 def test_voice_stop_after_limits_worklist(monkeypatch, tmp_path, stub_runner):
     config_path = write_config(tmp_path)
     progress = write_progress(tmp_path)
