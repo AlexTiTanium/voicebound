@@ -137,7 +137,9 @@ def generate_voice(
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
     output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
-    audio_format = audio_format or voice_cfg.get("audio_format", "mp3")
+    audio_format = audio_format or provider_cfg.get("audio_format") or voice_cfg.get(
+        "audio_format", "mp3"
+    )
     allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
     stop_after = voice_cfg.get("stop_after", 0) if stop_after is None else stop_after

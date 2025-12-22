@@ -1,20 +1,20 @@
 [openai]
 api_key = ""
 model = "gpt-5-nano"
-rpm = 120
-concurrency = 5
+rpm = 220
+concurrency = 20
 
 [hume_ai]
 api_key = ""
 model = "octave"
 voice_name = "ivan"
 octave_version = "2"
+audio_format = "mp3"
 split_utterances = true
 rpm = 75
 concurrency = 4
-pricing_tier = "creator"
 pricing_free_chars = 140000
-pricing_rate_per_1k = 0.075
+pricing_rate_per_1k = 0.15
 
 [retry]
 attempts = 4
@@ -36,7 +36,6 @@ provider = "openai"
 [voice]
 input_file = ".cache/progress.json"
 output_dir = "out/hume"
-audio_format = "mp3"
 allowed_regex = "^chp"
 ignore_regex = ""
 stop_after = 0
