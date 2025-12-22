@@ -125,7 +125,6 @@ def generate_voice(
         provider_key=provider_info.key,
         default_model=provider_info.default_model,
         default_rpm=provider_info.default_rpm,
-        concurrency_override=voice_cfg.get("max_workers"),
     )
 
     model = get_config_value(

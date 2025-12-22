@@ -50,7 +50,6 @@ def make_command_context(
     provider_key: str,
     default_model: str,
     default_rpm: int,
-    concurrency_override: int | None = None,
     log_level: str | None = None,
     color: bool = True,
 ) -> CommandContext:
@@ -62,7 +61,6 @@ def make_command_context(
         provider_key: Key for the provider in the config (e.g., "openai").
         default_model: Default model to use if not specified in config.
         default_rpm: Default requests per minute.
-        concurrency_override: Optional override for concurrency.
         log_level: Logging level (e.g., "INFO", "DEBUG").
         color: Whether to enable colored logging.
 
@@ -76,7 +74,6 @@ def make_command_context(
         provider_key=provider_key,
         default_model=default_model,
         default_rpm=default_rpm,
-        concurrency_override=concurrency_override,
     )
     return CommandContext(config=config, provider=provider, logger=logger)
 

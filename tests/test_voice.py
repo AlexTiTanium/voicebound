@@ -49,7 +49,6 @@ audio_format = "mp3"
 allowed_regex = "^keep"
 ignore_regex = "skip"
 stop_after = 0
-max_workers = 2
 target_language = "Spanish"
 provider = "HUME_AI"
 jitter_fraction = 0.1

@@ -42,7 +42,6 @@ def test_make_command_context(tmp_path):
         provider_key="openai",
         default_model="gpt-5-nano",
         default_rpm=60,
-        concurrency_override=2,
     )
     assert ctx.provider.api_key == "dummy"
     assert ctx.provider.concurrency == 2

@@ -115,7 +115,6 @@ progress_file = "{progress_file.as_posix()}"
 allowed_regex = "^keep"
 ignore_regex = "skip"
 dry_run = false
-max_workers = 2
 count_tokens_enabled = true
 target_language = "Spanish"
 provider = "openai"
@@ -491,7 +490,6 @@ def test_translate_typer_command(monkeypatch, tmp_path):
         allowed_regex="^x",
         ignore_regex="y",
         dry_run=True,
-        max_workers=1,
         model="m",
         target_language="es",
         config_path=Path("config.toml"),
@@ -527,7 +525,6 @@ def test_translate_reports_errors(monkeypatch, tmp_path):
         config_path=config_path,
         input_file=tmp_path / "strings.xml",
         output_file=output_file,
-        max_workers=1,
     )
     assert output_file.exists()
     summary = ai_translate._summarize_results(

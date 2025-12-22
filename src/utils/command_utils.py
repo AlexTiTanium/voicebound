@@ -110,7 +110,6 @@ def load_provider_settings(
     provider_key: str,
     default_model: str,
     default_rpm: int,
-    concurrency_override: int | None = None,
 ) -> ProviderSettings:
     """
     Load and validate provider settings from configuration.
@@ -120,7 +119,6 @@ def load_provider_settings(
         provider_key: The key for the provider in the config.
         default_model: Default model if not specified.
         default_rpm: Default RPM if not specified.
-        concurrency_override: Optional concurrency override.
 
     Returns:
         A ProviderSettings object.
@@ -130,7 +128,7 @@ def load_provider_settings(
     model = get_config_value(config, provider_key, "model", required=False, default=default_model)
     rpm = int(get_config_value(config, provider_key, "rpm", required=False, default=default_rpm))
     retry = load_retry_defaults(config)
-    concurrency = derive_concurrency(rpm, concurrency_override or provider_cfg.get("concurrency"))
+    concurrency = derive_concurrency(rpm, provider_cfg.get("concurrency"))
     return ProviderSettings(
         api_key=api_key,
         model=model,
