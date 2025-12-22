@@ -6,13 +6,16 @@ repos:
         entry: uv run ruff check .
         language: system
         pass_filenames: false
+        stages: [push]
       - id: ty
         name: ty check
         entry: uv run ty check .
         language: system
         pass_filenames: false
+        stages: [push]
       - id: pytest
         name: pytest
         entry: uv run pytest --cov=src
         language: system
         pass_filenames: false
+        stages: [push]
