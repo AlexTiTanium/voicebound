@@ -145,7 +145,7 @@ def test_cli_voice_smoke(monkeypatch, tmp_path):
             "--output-dir",
             str(out_dir),
             "--provider",
-            "HUME_AI",
+            "hume_ai",
             "--allowed-regex",
             "^keep",
             "--ignore-regex",
@@ -159,7 +159,7 @@ def test_cli_voice_smoke(monkeypatch, tmp_path):
     assert result.exit_code == 0
     assert called["input_file"] == Path(progress)
     assert called["output_dir"] == Path(out_dir)
-    assert called["provider"] == "HUME_AI"
+    assert called["provider"] == "hume_ai"
     assert called["allowed_regex"] == "^keep"
     assert called["ignore_regex"] == "skip"
     assert called["stop_after"] == 2

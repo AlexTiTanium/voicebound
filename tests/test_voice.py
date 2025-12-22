@@ -50,7 +50,7 @@ allowed_regex = "^keep"
 ignore_regex = "skip"
 stop_after = 0
 target_language = "Spanish"
-provider = "HUME_AI"
+provider = "hume_ai"
 jitter_fraction = 0.1
 max_elapsed_seconds = 5
 

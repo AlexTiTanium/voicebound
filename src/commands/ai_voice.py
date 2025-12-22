@@ -111,11 +111,12 @@ def generate_voice(
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     voice_cfg = config.get("voice", {})
-    voice_provider = provider or voice_cfg.get("provider", "HUME_AI")
-    api_provider = voice_cfg.get("api_provider") or voice_provider
-    provider_info = get_voice_provider_info(str(api_provider))
+    voice_provider = provider or voice_cfg.get("provider", "hume_ai")
+    provider_info = get_voice_provider_info(str(voice_provider))
     if provider_info is None:
-        logger.warning(f"[VOICE] Provider '{api_provider}' is not recognized; defaulting to Hume.")
+        logger.warning(
+            f"[VOICE] Provider '{voice_provider}' is not recognized; defaulting to Hume."
+        )
         provider_info = get_voice_provider_info("hume_ai")
     if provider_info is None:
         raise SystemExit("[VOICE] No voice providers are registered.")
