@@ -57,7 +57,7 @@ class ElevenLabsVoiceProvider:
         payload: VoicePayload,
     ) -> httpx.Response:
         """Send POST request to ElevenLabs API."""
-        body: dict[str, Any] = dict(payload)
+        body: dict[str, Any] = {**payload}
         voice_id = body.pop("voice_id", None)
         if not voice_id:
             raise ValueError("ElevenLabs payload missing voice_id.")

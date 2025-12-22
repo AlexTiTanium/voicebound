@@ -23,6 +23,8 @@ voice_name = "VOICE_ID"
 audio_format = "mp3"
 rpm = 60
 concurrency = 4
+pricing_free_chars = 0
+pricing_rate_per_1k = 0.30
 
 [retry]
 attempts = 4
@@ -44,7 +46,7 @@ provider = "openai"
 
 [voice]
 input_file = ".cache/project_progress.json"
-output_dir = "project/hume"
+output_dir = "project/voice"
 allowed_regex = "^chp"
 ignore_regex = ""
 stop_after = 0
