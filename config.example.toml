@@ -18,13 +18,14 @@ pricing_rate_per_1k = 0.15
 
 [elevenlabs]
 api_key = ""
-model = "eleven_multilingual_v2"
+model = "eleven_v3"
 voice_name = "VOICE_ID"
 audio_format = "mp3"
 rpm = 60
 concurrency = 4
+max_chars_limit = 5000 # 5k eleven_v3 and 40k for eleven_multilingual_v2
 pricing_free_chars = 0
-pricing_rate_per_1k = 0.30
+pricing_rate_per_1k = 0.30 # eleven_v3 and eleven_multilingual_v2
 
 [retry]
 attempts = 4

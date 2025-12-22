@@ -133,6 +133,58 @@ def test_voice_dry_run_skips_runner(monkeypatch, tmp_path):
     assert "ran" not in called
 
 
+def test_voice_dry_run_elevenlabs_warns_on_limit(monkeypatch, tmp_path):
+    progress = tmp_path / "tmp-cache/progress.json"
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    progress.write_text('{"keep_long": "' + ("a" * 5001) + '"}', encoding="utf-8")
+
+    out_dir = tmp_path / "tmp-output/elevenlabs"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+[openai]
+api_key = "dummy-openai"
+
+[hume_ai]
+api_key = "dummy-hume"
+
+[elevenlabs]
+api_key = "dummy-eleven"
+model = "eleven_multilingual_v2"
+voice_name = "voice-id"
+max_chars_limit = 5000
+
+[voice]
+input_file = "{progress.as_posix()}"
+output_dir = "{out_dir.as_posix()}"
+audio_format = "mp3"
+allowed_regex = "^keep"
+ignore_regex = ""
+stop_after = 0
+provider = "elevenlabs"
+dry_run = true
+        """,
+        encoding="utf-8",
+    )
+
+    warnings: list[str] = []
+
+    def _warn(message: str) -> None:
+        warnings.append(message)
+
+    monkeypatch.setattr(ai_voice.logger, "warning", _warn)
+
+    ai_voice.generate_voice(
+        config_path=config,
+        input_file=progress,
+        output_dir=out_dir,
+        allowed_regex="^keep",
+        dry_run=True,
+    )
+
+    assert any("keep_long" in message for message in warnings)
+
+
 def test_voice_dry_run_summary_counts():
     worklist = [("a", "Hi"), ("b", "Hola")]
     summary = ai_voice._summarize_voice_dry_run(

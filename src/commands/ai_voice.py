@@ -198,6 +198,14 @@ def generate_voice(
         currency = str(
             provider_cfg.get("pricing_currency", voice_cfg.get("pricing_currency", "USD"))
         )
+        if provider_info.key == "elevenlabs":
+            max_chars_limit = int(provider_cfg.get("max_chars_limit", 5000))
+            for key, text in worklist:
+                if len(text) > max_chars_limit:
+                    logger.warning(
+                        f"[VOICE] ElevenLabs max_chars_limit={max_chars_limit} exceeded by "
+                        f"{key} ({len(text)} chars)."
+                    )
         if octave_version != "2":
             logger.warning(
                 "[VOICE] Default pricing assumes Octave 2; override pricing values if needed."

@@ -178,6 +178,10 @@ def translate_strings(
     )
     if stop_after and len(translate_nodes) > stop_after:
         translate_nodes = translate_nodes[:stop_after]
+    if stop_after and translate_nodes:
+        ids = [node.get("name") or "" for node in translate_nodes]
+        ids = [name for name in ids if name]
+        logger.info(f"[TRANSLATE] stop_after={stop_after}; translating ids: {', '.join(ids)}")
 
     if not dry_run:
         logger.info(f"[TRANSLATE] Translating {len(translate_nodes)} strings using {model}.")
