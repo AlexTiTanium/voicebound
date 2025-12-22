@@ -14,7 +14,7 @@ rpm = 75
 concurrency = 4
 pricing_tier = "creator"
 pricing_free_chars = 140000
-pricing_rate_per_1k = 0.15
+pricing_rate_per_1k = 0.075
 
 [retry]
 attempts = 4

@@ -228,10 +228,10 @@ def test_task_runner_retry_error_path(monkeypatch):
     runner = TaskRunner(cfg, TaskHooks(on_failure=on_failure))
 
     class RaisingRetrying:
-        def __aiter__(self):
-            return self
+        def __init__(self):
+            self.statistics = {"attempt_number": 1}
 
-        async def __anext__(self):
+        async def __call__(self, _fn):
             future = Future(1)
             future.set_exception(ValueError("boom"))
             raise RetryError(future)

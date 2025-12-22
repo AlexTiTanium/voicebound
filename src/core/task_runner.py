@@ -175,23 +175,22 @@ class TaskRunner(Generic[T]):
             outcomes: Shared list used to collect TaskOutcome entries.
             lock: Async lock guarding access to the outcomes list.
         """
-        attempts = 0
-        result: T | None = None
         retrying = self._make_retrying(spec)
 
         try:
-            async for attempt in retrying:
-                attempts = attempt.retry_state.attempt_number
+            async def _call() -> T:
                 async with self._semaphore:
                     async with self._limiter:
-                        with attempt:
-                            result = await spec.coro_factory()
-                outcome = TaskOutcome[T](
-                    task_id=spec.task_id, ok=True, result=result, error=None, attempts=attempts
-                )
-                await self._record_outcome(outcomes, lock, outcome)
-                await self._maybe_call(self.hooks.on_success, spec, result)
-                return
+                        return await spec.coro_factory()
+
+            result = await retrying(_call)
+            attempts = retrying.statistics.get("attempt_number", 1)
+            outcome = TaskOutcome[T](
+                task_id=spec.task_id, ok=True, result=result, error=None, attempts=attempts
+            )
+            await self._record_outcome(outcomes, lock, outcome)
+            await self._maybe_call(self.hooks.on_success, spec, result)
+            return
         except RetryError as exc:
             err = exc.last_attempt.exception() or exc
             outcome = TaskOutcome[T](
@@ -199,7 +198,7 @@ class TaskRunner(Generic[T]):
                 ok=False,
                 result=None,
                 error=err,
-                attempts=attempts or self.config.retry.attempts,
+                attempts=exc.last_attempt.attempt_number,
             )
             await self._record_outcome(outcomes, lock, outcome)
             await self._maybe_call(self.hooks.on_failure, spec, err)
@@ -209,7 +208,7 @@ class TaskRunner(Generic[T]):
                 ok=False,
                 result=None,
                 error=exc,
-                attempts=attempts or 1,
+                attempts=retrying.statistics.get("attempt_number", 1),
             )
             await self._record_outcome(outcomes, lock, outcome)
             await self._maybe_call(self.hooks.on_failure, spec, exc)
