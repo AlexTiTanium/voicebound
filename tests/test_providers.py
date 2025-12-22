@@ -1,6 +1,7 @@
 from typing import Any, cast
 
 import httpx
+import pytest
 
 from apis.voice_api import VoicePayload, VoiceSettings
 from core.task_runner import RetryConfig
@@ -213,6 +214,27 @@ def test_elevenlabs_provider_send_request_uses_voice_id():
     assert calls["headers"] == {"h": "v"}
     assert calls["json"] == {"text": "hello", "model_id": "eleven_multilingual_v2"}
     assert calls["timeout"] == 120
+
+
+def test_elevenlabs_provider_requires_voice_id():
+    provider = elevenlabs_provider.ElevenLabsVoiceProvider()
+
+    class DummyClient:
+        async def post(self, *_args, **_kwargs):
+            raise AssertionError("Client should not be called without voice_id.")
+
+    payload = {"text": "hello", "model_id": "eleven_multilingual_v2"}
+
+    import asyncio
+
+    with pytest.raises(ValueError):
+        asyncio.run(
+            provider.send_request(
+                client=cast(httpx.AsyncClient, DummyClient()),
+                headers={"h": "v"},
+                payload=cast(VoicePayload, payload),
+            )
+        )
 
 
 def test_registry_resolves_aliases_and_missing():

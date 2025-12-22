@@ -185,6 +185,55 @@ dry_run = true
     assert any("keep_long" in message for message in warnings)
 
 
+def test_voice_dry_run_warns_on_non_octave2(monkeypatch, tmp_path):
+    progress = tmp_path / "tmp-cache/progress.json"
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    progress.write_text('{"keep_one": "Hello"}', encoding="utf-8")
+
+    out_dir = tmp_path / "tmp-output/hume"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+[openai]
+api_key = "dummy-openai"
+
+[hume_ai]
+api_key = "dummy-hume"
+model = "octave"
+voice_name = "ivan"
+octave_version = "1"
+
+[voice]
+input_file = "{progress.as_posix()}"
+output_dir = "{out_dir.as_posix()}"
+audio_format = "mp3"
+allowed_regex = "^keep"
+ignore_regex = ""
+stop_after = 0
+provider = "hume_ai"
+dry_run = true
+        """,
+        encoding="utf-8",
+    )
+
+    warnings: list[str] = []
+
+    def _warn(message: str) -> None:
+        warnings.append(message)
+
+    monkeypatch.setattr(ai_voice.logger, "warning", _warn)
+
+    ai_voice.generate_voice(
+        config_path=config,
+        input_file=progress,
+        output_dir=out_dir,
+        allowed_regex="^keep",
+        dry_run=True,
+    )
+
+    assert any("Default pricing assumes Octave 2" in message for message in warnings)
+
+
 def test_voice_dry_run_summary_counts():
     worklist = [("a", "Hi"), ("b", "Hola")]
     summary = ai_voice._summarize_voice_dry_run(

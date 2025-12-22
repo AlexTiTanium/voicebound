@@ -172,6 +172,90 @@ def test_translate_nodes_async_dry_run_records_tuple(tmp_path):
     assert isinstance(results[0][2], tuple)
 
 
+def test_translate_nodes_async_dry_run_records_non_tuple(tmp_path):
+    provider = DummyTranslationProvider()
+    service = TranslationService(
+        cast(TranslationProvider, provider),
+        provider_settings=_make_provider_settings(),
+    )
+    filters = TranslationFilters(
+        allowed_pattern=re.compile(r"^keep"),
+        ignore_pattern=re.compile(r"^skip"),
+    )
+    settings = TranslationSettings(
+        model="gpt-5-nano",
+        target_language="Spanish",
+        dry_run=True,
+        count_tokens_enabled=False,
+    )
+    progress = TranslationProgress(
+        done={},
+        progress_file=tmp_path / "progress.json",
+        progress_lock=Lock(),
+    )
+    summary = SummaryReporter("translate")
+
+    async def _run():
+        return await service.translate_nodes_async(
+            [_make_node("skip_one", "Hello")],
+            filters=filters,
+            progress=progress,
+            settings=settings,
+            summary=summary,
+        )
+
+    results = anyio.run(_run)
+
+    assert results[0][2] == "ignored"
+    assert summary.ignored == 1
+
+
+def test_translate_nodes_async_records_error_tuple(tmp_path):
+    class FailingProvider:
+        key = "dummy"
+        name = "dummy"
+        default_model = "gpt-5-nano"
+        default_rpm = 60
+
+        def translate_text(self, _text: str, _model: str, _target_language: str) -> str:
+            raise ValueError("boom")
+
+    service = TranslationService(
+        cast(TranslationProvider, FailingProvider()),
+        provider_settings=_make_provider_settings(),
+    )
+    filters = TranslationFilters(
+        allowed_pattern=re.compile(r"^keep"),
+        ignore_pattern=re.compile(r"^skip"),
+    )
+    settings = TranslationSettings(
+        model="gpt-5-nano",
+        target_language="Spanish",
+        dry_run=False,
+        count_tokens_enabled=False,
+    )
+    progress = TranslationProgress(
+        done={},
+        progress_file=tmp_path / "progress.json",
+        progress_lock=Lock(),
+    )
+    summary = SummaryReporter("translate")
+
+    async def _run():
+        return await service.translate_nodes_async(
+            [_make_node("keep_one", "Hello")],
+            filters=filters,
+            progress=progress,
+            settings=settings,
+            summary=summary,
+        )
+
+    results = anyio.run(_run)
+
+    assert isinstance(results[0][2], tuple)
+    assert summary.failures == ["keep_one"]
+
+
 def test_translate_nodes_async_failure_callback(monkeypatch, tmp_path):
     provider = DummyTranslationProvider()
     service = TranslationService(

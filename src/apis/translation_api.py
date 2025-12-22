@@ -367,8 +367,7 @@ class TranslationService:
             summary.log_translation(str(progress.progress_file))
             return results
         provider_settings = self._provider_settings
-        if provider_settings is None:
-            raise ValueError("provider_settings is required for translate_nodes_async.")
+        assert provider_settings is not None
         runner = build_runner(
             "translate",
             provider_settings,
