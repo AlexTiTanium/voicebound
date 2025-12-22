@@ -115,6 +115,7 @@ progress_file = "{progress_file.as_posix()}"
 allowed_regex = "^keep"
 ignore_regex = "skip"
 dry_run = false
+stop_after = 0
 count_tokens_enabled = true
 target_language = "Spanish"
 provider = "openai"
@@ -227,6 +228,35 @@ def test_translate_uses_cache_and_skips_api(monkeypatch, tmp_path):
     text = output_file.read_text(encoding="utf-8")
     assert "Cached text" in text
     # Only one uncached item should invoke translation
+    assert call_count["count"] == 1
+
+
+def test_translate_stop_after_limits_worklist(monkeypatch, tmp_path):
+    config_path = write_config(tmp_path)
+    write_strings(tmp_path)
+
+    call_count = {"count": 0}
+
+    def _translate_text(self, text, model, target_language):
+        call_count["count"] += 1
+        return "Hola"
+
+    monkeypatch.setattr(
+        openai_provider, "OpenAI", lambda api_key: DummyOpenAI(api_key, "Hola mundo")
+    )
+    monkeypatch.setattr(
+        openai_provider.OpenAITranslationProvider, "translate_text", _translate_text
+    )
+
+    output_file = tmp_path / "strings.out.xml"
+
+    ai_translate.translate_strings(
+        config_path=config_path,
+        input_file=tmp_path / "strings.xml",
+        output_file=output_file,
+        stop_after=1,
+    )
+
     assert call_count["count"] == 1
 
 

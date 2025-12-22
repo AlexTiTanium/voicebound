@@ -66,6 +66,7 @@ def translate_strings(
     allowed_regex: str | None = None,
     ignore_regex: str | None = None,
     dry_run: bool | None = None,
+    stop_after: int | None = None,
     model: str | None = None,
     count_tokens_enabled: bool | None = None,
     target_language: str | None = None,
@@ -91,6 +92,7 @@ def translate_strings(
         allowed_regex: Regex to select keys for translation.
         ignore_regex: Regex to exclude keys from translation.
         dry_run: If True, simulate the process without API calls.
+        stop_after: Stop after processing N items (0 for no limit).
         model: Model identifier to use.
         count_tokens_enabled: Whether to count tokens (requires tiktoken).
         target_language: Target language for translation.
@@ -131,6 +133,7 @@ def translate_strings(
     allowed_regex = allowed_regex or translate_cfg.get("allowed_regex", r"^chp10_")
     ignore_regex = ignore_regex or translate_cfg.get("ignore_regex", r"app_name")
     dry_run = translate_cfg.get("dry_run", False) if dry_run is None else dry_run
+    stop_after = translate_cfg.get("stop_after", 0) if stop_after is None else stop_after
     count_tokens_enabled = (
         translate_cfg.get("count_tokens_enabled", True)
         if count_tokens_enabled is None
@@ -173,6 +176,8 @@ def translate_strings(
         filters=translation_filters,
         done=done,
     )
+    if stop_after and len(translate_nodes) > stop_after:
+        translate_nodes = translate_nodes[:stop_after]
 
     if not dry_run:
         logger.info(f"[TRANSLATE] Translating {len(translate_nodes)} strings using {model}.")
@@ -247,6 +252,7 @@ def typer_command(
     ),
     ignore_regex: str | None = typer.Option(None, help="Ignore entries matching this regex."),
     dry_run: bool | None = typer.Option(None, help="Dry run (no translation calls)."),
+    stop_after: int | None = typer.Option(None, help="Stop after N items (0 for no limit)."),
     model: str | None = typer.Option(None, help="OpenAI model to use."),
     target_language: str | None = typer.Option(None, help="Target language to translate into."),
     config_path: Path | None = typer.Option(None, help="Path to config.toml."),
@@ -263,6 +269,7 @@ def typer_command(
         allowed_regex=allowed_regex,
         ignore_regex=ignore_regex,
         dry_run=dry_run,
+        stop_after=stop_after,
         model=model,
         target_language=target_language,
         config_path=cfg_path,

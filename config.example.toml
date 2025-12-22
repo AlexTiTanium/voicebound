@@ -29,6 +29,7 @@ progress_file = ".cache/project_progress.json"
 allowed_regex = "^chp10_"
 ignore_regex = ""
 dry_run = false
+stop_after = 0
 count_tokens_enabled = true
 target_language = "Russian"
 provider = "openai"
