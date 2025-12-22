@@ -297,9 +297,9 @@ class TranslationService:
             return name, None, ("dry-run", orig_tokens, original[:80])
 
         if orig_tokens:
-            logger.info(f"[TRANSLATE] {name} — {orig_tokens} tokens.")
+            logger.debug(f"[TRANSLATE] {name} — {orig_tokens} tokens.")
         else:
-            logger.info(f"[TRANSLATE] {name}.")
+            logger.debug(f"[TRANSLATE] {name}.")
 
         try:
             translated = self.translate_text(original, settings.model, settings.target_language)
@@ -312,7 +312,7 @@ class TranslationService:
             progress.done[name] = translated
             persist_progress(progress.progress_file, progress.done)
 
-        logger.info(f"[SAVED] {name} progress updated in {progress.progress_file}.")
+        logger.debug(f"[SAVED] {name} progress updated in {progress.progress_file}.")
         return name, translated, "translated"
 
     async def translate_nodes_async(
@@ -366,14 +366,17 @@ class TranslationService:
                     summary.record_translation(status, result[0])
             summary.log_translation(str(progress.progress_file))
             return results
+        provider_settings = self._provider_settings
+        if provider_settings is None:
+            raise ValueError("provider_settings is required for translate_nodes_async.")
         runner = build_runner(
             "translate",
-            self._provider_settings,
+            provider_settings,
             TaskHooks[TranslationResult](),
         )
         logger.debug(
-            f"[TRANSLATE] Debug: rpm={self._provider_settings.rpm} "
-            f"concurrency={self._provider_settings.concurrency}"
+            f"[TRANSLATE] Debug: rpm={provider_settings.rpm} "
+            f"concurrency={provider_settings.concurrency}"
         )
         work_items: list[tuple[str, Callable[[], Awaitable[TranslationResult]]]] = []
         for idx, node in enumerate(nodes):
