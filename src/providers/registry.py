@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
+from providers.elevenlabs_provider import ElevenLabsVoiceProvider
 from providers.hume_provider import HumeVoiceProvider
 from providers.openai_provider import OpenAITranslationProvider
 
@@ -53,6 +54,13 @@ _TRANSLATION_PROVIDERS: dict[str, TranslationProviderInfo] = {
 }
 
 _VOICE_PROVIDERS: dict[str, VoiceProviderInfo] = {
+    "elevenlabs": VoiceProviderInfo(
+        key="elevenlabs",
+        name="elevenlabs",
+        default_model=ElevenLabsVoiceProvider.default_model,
+        default_rpm=ElevenLabsVoiceProvider.default_rpm,
+        factory=ElevenLabsVoiceProvider,
+    ),
     "hume_ai": VoiceProviderInfo(
         key="hume_ai",
         name="hume_ai",
@@ -65,6 +73,9 @@ _VOICE_PROVIDERS: dict[str, VoiceProviderInfo] = {
 _ALIASES: dict[str, str] = {
     "open_ai": "openai",
     "openia": "openai",
+    "11labs": "elevenlabs",
+    "eleven-labs": "elevenlabs",
+    "elevenlab": "elevenlabs",
     "hume": "hume_ai",
     "humeai": "hume_ai",
     "hume-ai": "hume_ai",

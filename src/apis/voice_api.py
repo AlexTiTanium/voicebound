@@ -66,9 +66,9 @@ class VoiceUtterance(TypedDict):
     voice: VoiceMeta
 
 
-class VoicePayload(TypedDict):
+class VoicePayload(TypedDict, total=False):
     """
-    Full JSON payload sent to the voice provider.
+    Provider-specific JSON payload sent to the voice API.
 
     Attributes:
         model: Model identifier selected by user/config.
@@ -76,6 +76,9 @@ class VoicePayload(TypedDict):
         split_utterances: Whether the provider should split utterances.
         version: Provider-specific model version.
         utterances: List of utterance entries to synthesize.
+        text: Text to synthesize (provider-specific).
+        model_id: Provider-specific model identifier.
+        voice_id: Provider-specific voice identifier.
 
     Example:
         >>> payload: VoicePayload = {
@@ -92,6 +95,9 @@ class VoicePayload(TypedDict):
     split_utterances: bool
     version: str
     utterances: list[VoiceUtterance]
+    text: str
+    model_id: str
+    voice_id: str
 
 
 VoiceResult = tuple[str, Literal["ok", "error"]]

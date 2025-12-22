@@ -4,7 +4,7 @@ import httpx
 
 from apis.voice_api import VoicePayload, VoiceSettings
 from core.task_runner import RetryConfig
-from providers import hume_provider, openai_provider, registry
+from providers import elevenlabs_provider, hume_provider, openai_provider, registry
 from utils.command_utils import ProviderSettings
 
 
@@ -149,6 +149,72 @@ def test_hume_provider_send_request_uses_client():
     assert calls["timeout"] == 120
 
 
+def test_elevenlabs_provider_builds_headers_and_payload():
+    provider = elevenlabs_provider.ElevenLabsVoiceProvider()
+    settings = ProviderSettings(
+        api_key="eleven-key",
+        model="eleven_multilingual_v2",
+        rpm=60,
+        concurrency=1,
+        retry=RetryConfig(),
+    )
+    voice_settings = VoiceSettings(
+        model="eleven_multilingual_v2",
+        voice_name="voice-id",
+        audio_format="mp3",
+        split_utterances=True,
+        octave_version="2",
+        max_elapsed_seconds=None,
+    )
+
+    headers = provider.build_headers(settings)
+    payload = provider.build_payload("hello", settings=voice_settings)
+
+    assert headers["xi-api-key"] == "eleven-key"
+    assert headers["Accept"] == "audio/mpeg"
+    assert payload["text"] == "hello"
+    assert payload["model_id"] == "eleven_multilingual_v2"
+    assert payload["voice_id"] == "voice-id"
+
+
+def test_elevenlabs_provider_send_request_uses_voice_id():
+    provider = elevenlabs_provider.ElevenLabsVoiceProvider()
+    calls = {}
+
+    class DummyResponse:
+        pass
+
+    class DummyClient:
+        async def post(self, url, headers=None, json=None, timeout=None):
+            calls["url"] = url
+            calls["headers"] = headers
+            calls["json"] = json
+            calls["timeout"] = timeout
+            return DummyResponse()
+
+    payload = {
+        "text": "hello",
+        "model_id": "eleven_multilingual_v2",
+        "voice_id": "voice-id",
+    }
+
+    import asyncio
+
+    response = asyncio.run(
+        provider.send_request(
+            client=cast(httpx.AsyncClient, DummyClient()),
+            headers={"h": "v"},
+            payload=cast(VoicePayload, payload),
+        )
+    )
+
+    assert isinstance(response, DummyResponse)
+    assert calls["url"] == f"{elevenlabs_provider.API_URL}/voice-id"
+    assert calls["headers"] == {"h": "v"}
+    assert calls["json"] == {"text": "hello", "model_id": "eleven_multilingual_v2"}
+    assert calls["timeout"] == 120
+
+
 def test_registry_resolves_aliases_and_missing():
     info = registry.get_translation_provider_info("Open_AI")
     assert info is not None
@@ -157,5 +223,9 @@ def test_registry_resolves_aliases_and_missing():
     voice_info = registry.get_voice_provider_info("hume-ai")
     assert voice_info is not None
     assert voice_info.key == "hume_ai"
+
+    voice_info = registry.get_voice_provider_info("11labs")
+    assert voice_info is not None
+    assert voice_info.key == "elevenlabs"
 
     assert registry.get_translation_provider_info(None) is None
