@@ -293,6 +293,7 @@ class TranslationService:
             return name, clean_text(original), "skipped"
 
         if settings.dry_run:
+            logger.debug(f"[DRY] {name} tokens={orig_tokens} preview='{original[:80]}'")
             return name, None, ("dry-run", orig_tokens, original[:80])
 
         if orig_tokens:
@@ -340,14 +341,40 @@ class TranslationService:
             A list of TranslationResult tuples.
         """
         results: list[TranslationResult] = []
-        if self._provider_settings is None:
+        if self._provider_settings is None and not settings.dry_run:
             raise ValueError("provider_settings is required for translate_nodes_async.")
+        logger.debug(
+            f"[TRANSLATE] Debug: nodes={len(nodes)} dry_run={settings.dry_run} "
+            f"count_tokens={settings.count_tokens_enabled}"
+        )
+        encoding = tiktoken.get_encoding("o200k_base") if settings.count_tokens_enabled else None
+        if settings.dry_run:
+            logger.debug("[TRANSLATE] Debug: dry-run bypasses TaskRunner (no RPM limits).")
+            for node in nodes:
+                result = self._process_node(
+                    node,
+                    filters=filters,
+                    progress=progress,
+                    settings=settings,
+                    encoding=encoding,
+                )
+                results.append(result)
+                status = result[2]
+                if isinstance(status, tuple):
+                    summary.record_translation(status[0], result[0])
+                else:
+                    summary.record_translation(status, result[0])
+            summary.log_translation(str(progress.progress_file))
+            return results
         runner = build_runner(
             "translate",
             self._provider_settings,
             TaskHooks[TranslationResult](),
         )
-        encoding = tiktoken.get_encoding("o200k_base") if settings.count_tokens_enabled else None
+        logger.debug(
+            f"[TRANSLATE] Debug: rpm={self._provider_settings.rpm} "
+            f"concurrency={self._provider_settings.concurrency}"
+        )
         work_items: list[tuple[str, Callable[[], Awaitable[TranslationResult]]]] = []
         for idx, node in enumerate(nodes):
             task_name = node.get("name") or f"string-{idx}"

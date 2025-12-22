@@ -176,17 +176,40 @@ def translate_strings(
         filters=translation_filters,
         done=done,
     )
+    if dry_run:
+        counts: dict[str, int] = {}
+        for _name, _text, status in pre_results:
+            key = status[0] if isinstance(status, tuple) else status
+            counts[key] = counts.get(key, 0) + 1
+        logger.debug(
+            f"[TRANSLATE] Dry-run debug: pre_results={len(pre_results)} counts={counts} "
+            f"translate_nodes={len(translate_nodes)}"
+        )
     if stop_after and len(translate_nodes) > stop_after:
         translate_nodes = translate_nodes[:stop_after]
     if stop_after and translate_nodes:
         ids = [node.get("name") or "" for node in translate_nodes]
         ids = [name for name in ids if name]
         logger.info(f"[TRANSLATE] stop_after={stop_after}; translating ids: {', '.join(ids)}")
+    if dry_run:
+        logger.debug(
+            f"[TRANSLATE] Dry-run debug: input_file={input_file} output_file={output_file} "
+            f"progress_file={progress_file}"
+        )
+        logger.debug(
+            f"[TRANSLATE] Dry-run debug: tasks={len(tasks)} pre_results={len(pre_results)} "
+            f"translate_nodes={len(translate_nodes)}"
+        )
+        if translate_nodes:
+            sample_ids = [node.get("name") or "" for node in translate_nodes[:5]]
+            sample_ids = [name for name in sample_ids if name]
+            logger.debug(f"[TRANSLATE] Dry-run debug: sample ids={', '.join(sample_ids)}")
 
     if not dry_run:
         logger.info(f"[TRANSLATE] Translating {len(translate_nodes)} strings using {model}.")
     else:
         logger.info(f"[TRANSLATE] Dry run enabled for {len(translate_nodes)} strings.")
+        logger.debug("[TRANSLATE] Dry-run debug: entering translate run.")
 
     try:
         summary = SummaryReporter("translate")
@@ -220,6 +243,9 @@ def translate_strings(
         raise SystemExit(130)
 
     if dry_run:
+        logger.debug(
+            f"[TRANSLATE] Dry-run debug: results={len(results)} pre_results={len(pre_results)}"
+        )
         _print_dry_run(results)
         return
 
@@ -237,7 +263,7 @@ def _print_dry_run(results: Iterable[TranslationResult]) -> None:
             case ("dry-run", tokens, preview):
                 total_tokens += tokens
                 count += 1
-                logger.info(f"[DRY] {name}: {tokens} tokens → '{preview}...'")
+                logger.debug(f"[DRY] {name}: {tokens} tokens → '{preview}...'")
 
     logger.info("=== SUMMARY ===")
     logger.info(f"Strings to be translated: {count}")
