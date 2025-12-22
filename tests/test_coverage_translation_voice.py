@@ -251,7 +251,7 @@ def _voice_payload(text: str) -> VoicePayload:
         "split_utterances": True,
         "version": "2",
         "utterances": [
-            {"text": text, "voice": {"name": "ivan", "provider": "hume_ai"}}
+            {"text": text, "voice": {"name": "ivan", "provider": "HUME_AI"}}
         ],
     }
 
@@ -328,7 +328,6 @@ def test_run_voice_async_success_and_skip(tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        provider="hume_ai",
         audio_format="mp3",
         split_utterances=True,
         octave_version="2",
@@ -361,7 +360,6 @@ def test_run_voice_async_failure_records_error(monkeypatch, tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        provider="hume_ai",
         audio_format="mp3",
         split_utterances=True,
         octave_version="2",
@@ -421,7 +419,6 @@ def test_run_voice_async_retries_and_logs(monkeypatch, tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        provider="hume_ai",
         audio_format="mp3",
         split_utterances=True,
         octave_version="2",
@@ -477,7 +474,6 @@ def test_run_voice_async_requires_provider_settings(tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        provider="hume_ai",
         audio_format="mp3",
         split_utterances=True,
         octave_version="2",

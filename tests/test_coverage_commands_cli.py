@@ -160,7 +160,6 @@ def test_run_voice_async_builds_voice_settings(tmp_path):
         "mp3",
         "octave",
         "ivan",
-        "hume_ai",
         True,
         "2",
         None,

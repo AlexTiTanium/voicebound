@@ -62,7 +62,6 @@ def test_hume_provider_builds_headers_and_payload():
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        provider="hume_ai",
         audio_format="mp3",
         split_utterances=True,
         octave_version="2",
@@ -79,7 +78,7 @@ def test_hume_provider_builds_headers_and_payload():
     assert payload["version"] == "2"
     assert payload["utterances"][0]["text"] == "hello"
     assert payload["utterances"][0]["voice"]["name"] == "ivan"
-    assert payload["utterances"][0]["voice"]["provider"] == "hume_ai"
+    assert payload["utterances"][0]["voice"]["provider"] == "HUME_AI"
 
 
 def test_hume_provider_send_request_uses_client():
@@ -103,7 +102,7 @@ def test_hume_provider_send_request_uses_client():
         "split_utterances": True,
         "version": "2",
         "utterances": [
-            {"text": "hello", "voice": {"name": "ivan", "provider": "hume_ai"}}
+            {"text": "hello", "voice": {"name": "ivan", "provider": "HUME_AI"}}
         ],
     }
 

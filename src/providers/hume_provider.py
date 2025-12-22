@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from utils.command_utils import ProviderSettings
 
 API_URL = "https://api.hume.ai/v0/tts/file"
+VOICE_PROVIDER_ENUM = "HUME_AI"
 
 
 @dataclass(frozen=True)
@@ -46,7 +47,7 @@ class HumeVoiceProvider:
             "utterances": [
                 {
                     "text": text,
-                    "voice": {"name": settings.voice_name, "provider": settings.provider},
+                    "voice": {"name": settings.voice_name, "provider": VOICE_PROVIDER_ENUM},
                 }
             ],
         }

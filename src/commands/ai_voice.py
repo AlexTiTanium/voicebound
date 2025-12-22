@@ -219,7 +219,6 @@ def generate_voice(
             audio_format,
             model,
             voice_name,
-            voice_provider,
             split_utterances,
             octave_version,
             max_elapsed_seconds,
@@ -288,7 +287,6 @@ async def _run_voice_async(
     audio_format: str,
     model: str,
     voice_name: str,
-    provider: str,
     split_utterances: bool,
     octave_version: str,
     max_elapsed_seconds: float | None,
@@ -306,7 +304,6 @@ async def _run_voice_async(
         audio_format: Audio format extension for output files.
         model: Provider model identifier (user/config supplied).
         voice_name: Provider voice name (user/config supplied).
-        provider: Provider name metadata (user/config supplied).
         split_utterances: Whether to let the API split utterances.
         octave_version: Provider-specific voice model version.
         max_elapsed_seconds: Optional per-request timeout.
@@ -321,7 +318,6 @@ async def _run_voice_async(
     voice_settings = VoiceSettings(
         model=model,
         voice_name=voice_name,
-        provider=provider,
         audio_format=audio_format,
         split_utterances=split_utterances,
         octave_version=octave_version,

@@ -38,10 +38,9 @@ class VoiceMeta(TypedDict):
 
     Attributes:
         name: Voice name chosen by the user/config.
-        provider: Voice provider identifier.
 
     Example:
-        >>> meta: VoiceMeta = {"name": "ivan", "provider": "hume_ai"}
+        >>> meta: VoiceMeta = {"name": "ivan", "provider": "HUME_AI"}
     """
 
     name: str
@@ -59,7 +58,7 @@ class VoiceUtterance(TypedDict):
     Example:
         >>> utterance: VoiceUtterance = {
         ...     "text": "Hello",
-        ...     "voice": {"name": "ivan", "provider": "hume_ai"},
+        ...     "voice": {"name": "ivan", "provider": "HUME_AI"},
         ... }
     """
 
@@ -106,7 +105,6 @@ class VoiceSettings:
     Attributes:
         model: User/config-selected voice model.
         voice_name: User/config-selected voice name.
-        provider: Provider name metadata.
         audio_format: Output audio format extension.
         split_utterances: Whether to let the provider split utterances.
         octave_version: Provider-specific model version.
@@ -116,7 +114,6 @@ class VoiceSettings:
         >>> settings = VoiceSettings(
         ...     model="octave",
         ...     voice_name="ivan",
-        ...     provider="hume_ai",
         ...     audio_format="mp3",
         ...     split_utterances=True,
         ...     octave_version="2",
@@ -126,7 +123,6 @@ class VoiceSettings:
 
     model: str
     voice_name: str
-    provider: str
     audio_format: str
     split_utterances: bool
     octave_version: str
