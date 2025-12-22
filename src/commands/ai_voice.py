@@ -2,6 +2,7 @@ from pathlib import Path
 from typing import TypedDict
 
 import anyio
+import tiktoken
 import typer
 from loguru import logger
 
@@ -64,8 +65,28 @@ class VoiceDryRunSummary(TypedDict):
     currency: str
 
 
+class OpenAITTSDryRunSummary(TypedDict):
+    """
+    Summary of estimated OpenAI TTS cost for dry runs (token-based).
+    """
+
+    total_tokens: int
+    acting_input_tokens: int
+    acting_output_tokens: int
+    acting_estimated_cost: float
+    tts_input_tokens: int
+    tts_output_tokens: int
+    tts_estimated_cost: float
+    total_estimated_cost: float
+    currency: str
+
+
 VOICE_PRICING_DEFAULT_FREE_CHARS = 0
 VOICE_PRICING_DEFAULT_RATE = 0.15
+OPENAI_ACTING_INPUT_RATE_PER_1M = 0.05
+OPENAI_ACTING_OUTPUT_RATE_PER_1M = 0.40
+OPENAI_TTS_INPUT_RATE_PER_1M = 0.60
+OPENAI_TTS_OUTPUT_RATE_PER_1M = 12.00
 
 
 def generate_voice(
@@ -132,14 +153,30 @@ def generate_voice(
         config, provider_info.key, "model", required=False, default=provider_settings.model
     )
     voice_name = get_config_value(
-        config, provider_info.key, "voice_name", required=False, default="ivan"
+        config,
+        provider_info.key,
+        "voice_name",
+        required=False,
+        default=provider_info.default_voice_name,
     )
     split_utterances = provider_cfg.get("split_utterances", True)
+    enabled_acting_instruction = bool(
+        provider_cfg.get(
+            "enabled_acting_instruction",
+            voice_cfg.get("enabled_acting_instruction", False),
+        )
+    )
+    acting_instruction_model = str(
+        provider_cfg.get(
+            "acting_instruction_model",
+            voice_cfg.get("acting_instruction_model", "gpt-5-nano"),
+        )
+    )
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
     output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
-    audio_format = audio_format or provider_cfg.get("audio_format") or voice_cfg.get(
-        "audio_format", "mp3"
+    audio_format = (
+        audio_format or provider_cfg.get("audio_format") or voice_cfg.get("audio_format", "mp3")
     )
     allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
@@ -157,7 +194,7 @@ def generate_voice(
 
     progress: dict[str, str | None] = load_progress(input_file, default={}) or {}
     ensure_directory(output_dir)
-    api_provider_client = provider_info.factory()
+    api_provider_client = provider_info.factory(provider_settings.api_key)
     existing_outputs = (
         {path.stem for path in output_dir.glob(f"*.{audio_format}")}
         if output_dir.exists()
@@ -183,39 +220,72 @@ def generate_voice(
         logger.info("[VOICE] Nothing to process.")
         return
     if dry_run:
-        free_chars = int(
-            provider_cfg.get(
-                "pricing_free_chars",
-                voice_cfg.get("pricing_free_chars", VOICE_PRICING_DEFAULT_FREE_CHARS),
+        if provider_info.key == "openai_tts":
+            acting_input_rate = float(
+                provider_cfg.get(
+                    "acting_input_rate_per_1m",
+                    voice_cfg.get("acting_input_rate_per_1m", OPENAI_ACTING_INPUT_RATE_PER_1M),
+                )
             )
-        )
-        rate_per_1k = float(
-            provider_cfg.get(
-                "pricing_rate_per_1k",
-                voice_cfg.get("pricing_rate_per_1k", VOICE_PRICING_DEFAULT_RATE),
+            acting_output_rate = float(
+                provider_cfg.get(
+                    "acting_output_rate_per_1m",
+                    voice_cfg.get("acting_output_rate_per_1m", OPENAI_ACTING_OUTPUT_RATE_PER_1M),
+                )
             )
-        )
-        currency = str(
-            provider_cfg.get("pricing_currency", voice_cfg.get("pricing_currency", "USD"))
-        )
-        if provider_info.key == "elevenlabs":
-            max_chars_limit = int(provider_cfg.get("max_chars_limit", 5000))
-            for key, text in worklist:
-                if len(text) > max_chars_limit:
-                    logger.warning(
-                        f"[VOICE] ElevenLabs max_chars_limit={max_chars_limit} exceeded by "
-                        f"{key} ({len(text)} chars)."
-                    )
-        if octave_version != "2":
-            logger.warning(
-                "[VOICE] Default pricing assumes Octave 2; override pricing values if needed."
+            tts_input_rate = float(
+                provider_cfg.get(
+                    "tts_input_rate_per_1m",
+                    voice_cfg.get("tts_input_rate_per_1m", OPENAI_TTS_INPUT_RATE_PER_1M),
+                )
             )
-        _print_voice_dry_run(
-            worklist,
-            free_chars=free_chars,
-            rate_per_1k=rate_per_1k,
-            currency=currency,
-        )
+            tts_output_rate = float(
+                provider_cfg.get(
+                    "tts_output_rate_per_1m",
+                    voice_cfg.get("tts_output_rate_per_1m", OPENAI_TTS_OUTPUT_RATE_PER_1M),
+                )
+            )
+            _print_openai_tts_dry_run(
+                worklist,
+                acting_input_rate=acting_input_rate,
+                acting_output_rate=acting_output_rate,
+                tts_input_rate=tts_input_rate,
+                tts_output_rate=tts_output_rate,
+            )
+        else:
+            free_chars = int(
+                provider_cfg.get(
+                    "pricing_free_chars",
+                    voice_cfg.get("pricing_free_chars", VOICE_PRICING_DEFAULT_FREE_CHARS),
+                )
+            )
+            rate_per_1k = float(
+                provider_cfg.get(
+                    "pricing_rate_per_1k",
+                    voice_cfg.get("pricing_rate_per_1k", VOICE_PRICING_DEFAULT_RATE),
+                )
+            )
+            currency = str(
+                provider_cfg.get("pricing_currency", voice_cfg.get("pricing_currency", "USD"))
+            )
+            if provider_info.key == "elevenlabs":
+                max_chars_limit = int(provider_cfg.get("max_chars_limit", 5000))
+                for key, text in worklist:
+                    if len(text) > max_chars_limit:
+                        logger.warning(
+                            f"[VOICE] ElevenLabs max_chars_limit={max_chars_limit} exceeded by "
+                            f"{key} ({len(text)} chars)."
+                        )
+            if octave_version != "2":
+                logger.warning(
+                    "[VOICE] Default pricing assumes Octave 2; override pricing values if needed."
+                )
+            _print_voice_dry_run(
+                worklist,
+                free_chars=free_chars,
+                rate_per_1k=rate_per_1k,
+                currency=currency,
+            )
         return
     summary: VoiceSummary = {"successes": [], "failures": [], "skipped": len(existing_outputs)}
     try:
@@ -229,6 +299,8 @@ def generate_voice(
             voice_name,
             split_utterances,
             octave_version,
+            enabled_acting_instruction,
+            acting_instruction_model,
             max_elapsed_seconds,
             api_provider_client,
             provider_settings,
@@ -289,6 +361,74 @@ def _print_voice_dry_run(
     logger.info("No voice generation performed (dry-run mode).")
 
 
+def _summarize_openai_tts_dry_run(
+    worklist: list[tuple[str, str]],
+    *,
+    acting_input_rate: float,
+    acting_output_rate: float,
+    tts_input_rate: float,
+    tts_output_rate: float,
+) -> OpenAITTSDryRunSummary:
+    encoding = tiktoken.get_encoding("o200k_base")
+    total_tokens = sum(len(encoding.encode(text)) for _, text in worklist)
+    acting_input_tokens = total_tokens
+    acting_output_tokens = total_tokens
+    acting_estimated_cost = (acting_input_tokens / 1_000_000.0) * max(acting_input_rate, 0.0) + (
+        acting_output_tokens / 1_000_000.0
+    ) * max(acting_output_rate, 0.0)
+    tts_input_tokens = total_tokens
+    tts_output_tokens = total_tokens
+    tts_estimated_cost = (tts_input_tokens / 1_000_000.0) * max(tts_input_rate, 0.0) + (
+        tts_output_tokens / 1_000_000.0
+    ) * max(tts_output_rate, 0.0)
+    total_estimated_cost = acting_estimated_cost + tts_estimated_cost
+    return {
+        "total_tokens": total_tokens,
+        "acting_input_tokens": acting_input_tokens,
+        "acting_output_tokens": acting_output_tokens,
+        "acting_estimated_cost": acting_estimated_cost,
+        "tts_input_tokens": tts_input_tokens,
+        "tts_output_tokens": tts_output_tokens,
+        "tts_estimated_cost": tts_estimated_cost,
+        "total_estimated_cost": total_estimated_cost,
+        "currency": "USD",
+    }
+
+
+def _print_openai_tts_dry_run(
+    worklist: list[tuple[str, str]],
+    *,
+    acting_input_rate: float,
+    acting_output_rate: float,
+    tts_input_rate: float,
+    tts_output_rate: float,
+) -> None:
+    for key, text in worklist:
+        preview = text[:80].replace("\n", " ")
+        logger.info(f"[DRY] {key}: {len(text)} chars -> '{preview}...'")
+    summary = _summarize_openai_tts_dry_run(
+        worklist,
+        acting_input_rate=acting_input_rate,
+        acting_output_rate=acting_output_rate,
+        tts_input_rate=tts_input_rate,
+        tts_output_rate=tts_output_rate,
+    )
+    logger.info("=== SUMMARY ===")
+    logger.info(f"Total tokens: {summary['total_tokens']}")
+    logger.info(
+        "Acting instructions tokens: "
+        f"{summary['acting_input_tokens']} in / {summary['acting_output_tokens']} out"
+    )
+    logger.info(f"Acting instructions estimated cost: {summary['acting_estimated_cost']:.4f} USD")
+    logger.info(
+        "TTS tokens: " f"{summary['tts_input_tokens']} in / {summary['tts_output_tokens']} out"
+    )
+    logger.info(f"TTS estimated cost: {summary['tts_estimated_cost']:.4f} USD")
+    logger.info(f"Total estimated cost: {summary['total_estimated_cost']:.4f} USD")
+    logger.info("Assumes output tokens ~= input tokens.")
+    logger.info("No voice generation performed (dry-run mode).")
+
+
 async def _run_voice_async(
     worklist: list[tuple[str, str]],
     output_dir: Path,
@@ -297,6 +437,8 @@ async def _run_voice_async(
     voice_name: str,
     split_utterances: bool,
     octave_version: str,
+    enabled_acting_instruction: bool,
+    acting_instruction_model: str,
     max_elapsed_seconds: float | None,
     api_provider: VoiceProvider,
     provider_settings: ProviderSettings,
@@ -314,6 +456,8 @@ async def _run_voice_async(
         voice_name: Provider voice name (user/config supplied).
         split_utterances: Whether to let the API split utterances.
         octave_version: Provider-specific voice model version.
+        enabled_acting_instruction: Whether to auto-generate acting instructions.
+        acting_instruction_model: Model to use for acting instructions.
         max_elapsed_seconds: Optional per-request timeout.
         api_provider: Provider implementation instance.
         provider_settings: API key, model, RPM, and retry settings.
@@ -330,6 +474,8 @@ async def _run_voice_async(
         split_utterances=split_utterances,
         octave_version=octave_version,
         max_elapsed_seconds=max_elapsed_seconds,
+        enabled_acting_instruction=enabled_acting_instruction,
+        acting_instruction_model=acting_instruction_model,
     )
     service = VoiceService(api_provider, provider_settings=provider_settings)
     return await service.run_voice_async(

@@ -234,6 +234,101 @@ dry_run = true
     assert any("Default pricing assumes Octave 2" in message for message in warnings)
 
 
+def test_voice_openai_tts_dry_run_uses_token_pricing(monkeypatch, tmp_path):
+    progress = tmp_path / "tmp-cache/progress.json"
+    progress.parent.mkdir(parents=True, exist_ok=True)
+    progress.write_text('{"keep_one": "Hello there"}', encoding="utf-8")
+
+    out_dir = tmp_path / "tmp-output/openai"
+    config = tmp_path / "config.toml"
+    config.write_text(
+        f"""
+[openai]
+api_key = "dummy-openai"
+
+[openai_tts]
+api_key = "dummy-tts"
+model = "gpt-4o-mini-tts-2025-12-15"
+voice_name = "onyx"
+enabled_acting_instruction = false
+acting_instruction_model = "gpt-5-nano"
+acting_input_rate_per_1m = 0.05
+acting_output_rate_per_1m = 0.40
+tts_input_rate_per_1m = 0.60
+tts_output_rate_per_1m = 12.00
+
+[voice]
+input_file = "{progress.as_posix()}"
+output_dir = "{out_dir.as_posix()}"
+audio_format = "mp3"
+allowed_regex = "^keep"
+ignore_regex = ""
+stop_after = 0
+provider = "openai_tts"
+dry_run = true
+        """,
+        encoding="utf-8",
+    )
+
+    calls = {"ran": False}
+
+    def _print(worklist, **_kwargs):
+        calls["ran"] = True
+        assert worklist[0][0] == "keep_one"
+
+    monkeypatch.setattr(ai_voice, "_print_openai_tts_dry_run", _print)
+
+    ai_voice.generate_voice(
+        config_path=config,
+        input_file=progress,
+        output_dir=out_dir,
+        allowed_regex="^keep",
+        dry_run=True,
+    )
+
+    assert calls["ran"] is True
+
+
+def test_openai_tts_dry_run_summary_counts(monkeypatch):
+    worklist = [("a", "Hello"), ("b", "Hola")]
+    summary = ai_voice._summarize_openai_tts_dry_run(
+        worklist,
+        acting_input_rate=0.05,
+        acting_output_rate=0.40,
+        tts_input_rate=0.60,
+        tts_output_rate=12.00,
+    )
+
+    assert summary["total_tokens"] > 0
+    assert summary["acting_input_tokens"] == summary["total_tokens"]
+    assert summary["tts_output_tokens"] == summary["total_tokens"]
+    assert (
+        summary["total_estimated_cost"]
+        == summary["acting_estimated_cost"] + summary["tts_estimated_cost"]
+    )
+
+
+def test_openai_tts_dry_run_prints_summary(monkeypatch):
+    worklist = [("a", "Hello")]
+    messages: list[str] = []
+
+    def _info(message: str) -> None:
+        messages.append(message)
+
+    monkeypatch.setattr(ai_voice.logger, "info", _info)
+
+    ai_voice._print_openai_tts_dry_run(
+        worklist,
+        acting_input_rate=0.05,
+        acting_output_rate=0.40,
+        tts_input_rate=0.60,
+        tts_output_rate=12.00,
+    )
+
+    assert any("Total tokens" in msg for msg in messages)
+    assert any("Total estimated cost" in msg for msg in messages)
+
+
 def test_voice_dry_run_summary_counts():
     worklist = [("a", "Hi"), ("b", "Hola")]
     summary = ai_voice._summarize_voice_dry_run(

@@ -218,6 +218,7 @@ def translate_strings(
                 summary.record_translation(status, name)
 
         if translate_nodes:
+
             async def _run_translate() -> list[TranslationResult]:
                 """
                 Execute the async translation task runner.

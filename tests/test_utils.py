@@ -46,6 +46,7 @@ def test_write_and_load_json(tmp_path: Path):
     assert loaded == {"a": 1}
     assert utils.load_json(tmp_path / "missing.json", default={}) == {}
 
+
 def test_persist_progress_merges_existing(tmp_path: Path):
     path = tmp_path / "progress.json"
     utils.write_json(path, {"a": "one", "b": "two"})
@@ -106,6 +107,50 @@ api_key = "only-openai"
 """,
         encoding="utf-8",
     )
+    with pytest.raises(SystemExit):
+        utils.load_config(cfg)
+
+
+def test_validate_config_missing_openai_key(tmp_path: Path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[openai]
+api_key = ""
+
+[hume_ai]
+api_key = "dummy"
+        """,
+        encoding="utf-8",
+    )
+    with pytest.raises(SystemExit):
+        utils.load_config(cfg)
+
+
+def test_validate_config_import_failure_defaults_to_hume(monkeypatch, tmp_path: Path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[openai]
+api_key = "dummy"
+
+[voice]
+provider = "openai_tts"
+        """,
+        encoding="utf-8",
+    )
+
+    import builtins
+
+    original_import = builtins.__import__
+
+    def _fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "providers.registry":
+            raise ImportError("blocked")
+        return original_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", _fake_import)
+
     with pytest.raises(SystemExit):
         utils.load_config(cfg)
 

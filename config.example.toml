@@ -4,6 +4,20 @@ model = "gpt-5-nano"
 rpm = 220
 concurrency = 20
 
+[openai_tts]
+api_key = ""
+model = "gpt-4o-mini-tts-2025-12-15"
+voice_name = "onyx"
+audio_format = "mp3"
+enabled_acting_instruction = true
+acting_instruction_model = "gpt-5-nano"
+rpm = 400
+concurrency = 20
+acting_input_rate_per_1m = 0.05
+acting_output_rate_per_1m = 0.40
+tts_input_rate_per_1m = 0.60
+tts_output_rate_per_1m = 12.00
+
 [hume_ai]
 api_key = ""
 model = "octave"

@@ -123,6 +123,7 @@ def test_translate_nodes_async_requires_provider_settings(tmp_path):
     summary = SummaryReporter("translate")
 
     with pytest.raises(ValueError):
+
         async def _run():
             return await service.translate_nodes_async(
                 [],
@@ -334,9 +335,7 @@ def _voice_payload(text: str) -> VoicePayload:
         "format": {"type": "mp3"},
         "split_utterances": True,
         "version": "2",
-        "utterances": [
-            {"text": text, "voice": {"name": "ivan", "provider": "HUME_AI"}}
-        ],
+        "utterances": [{"text": text, "voice": {"name": "ivan", "provider": "HUME_AI"}}],
     }
 
 
@@ -371,6 +370,7 @@ def test_voice_service_synthesize_once_http_error(tmp_path):
     )
 
     with pytest.raises(RuntimeError):
+
         async def _run():
             return await service.synthesize_once(
                 client=cast(httpx.AsyncClient, object()),
@@ -393,6 +393,7 @@ def test_voice_service_synthesize_once_timeout(monkeypatch, tmp_path):
     monkeypatch.setattr("apis.voice_api.time.perf_counter", lambda: next(times))
 
     with pytest.raises(TimeoutError):
+
         async def _run():
             return await service.synthesize_once(
                 client=cast(httpx.AsyncClient, object()),
@@ -566,6 +567,7 @@ def test_run_voice_async_requires_provider_settings(tmp_path):
     summary = SummaryReporter("voice")
 
     with pytest.raises(ValueError):
+
         async def _run():
             return await service.run_voice_async(
                 [],
@@ -576,3 +578,37 @@ def test_run_voice_async_requires_provider_settings(tmp_path):
             )
 
         anyio.run(_run)
+
+
+def test_voice_service_build_payload_uses_async_provider(tmp_path):
+    class AsyncProvider:
+        async def build_payload_async(self, text, *, settings):
+            return {"input": text, "voice": settings.voice_name}
+
+        def build_payload(self, text, *, settings):
+            raise AssertionError("build_payload should not be called when async is available")
+
+        def build_headers(self, _settings):
+            return {}
+
+        async def send_request(self, *_args, **_kwargs):
+            raise AssertionError("send_request should not be called in this test")
+
+    settings = _make_provider_settings()
+    service = VoiceService(cast(VoiceProvider, AsyncProvider()), provider_settings=settings)
+    voice_settings = VoiceSettings(
+        model="octave",
+        voice_name="ivan",
+        audio_format="mp3",
+        split_utterances=True,
+        octave_version="2",
+        max_elapsed_seconds=None,
+        enabled_acting_instruction=False,
+        acting_instruction_model="gpt-5-nano",
+    )
+
+    async def _run():
+        payload = await service._build_payload("Hello", voice_settings)
+        assert payload["input"] == "Hello"
+
+    anyio.run(_run)

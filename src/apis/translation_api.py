@@ -380,6 +380,7 @@ class TranslationService:
         work_items: list[tuple[str, Callable[[], Awaitable[TranslationResult]]]] = []
         for idx, node in enumerate(nodes):
             task_name = node.get("name") or f"string-{idx}"
+
             def task_fn(
                 node: Element = node,
                 filters: TranslationFilters = filters,

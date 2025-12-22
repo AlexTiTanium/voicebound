@@ -20,7 +20,12 @@ DEFAULT_XDG_CONFIG = (
 
 REQUIRED_CONFIG = {
     "openai": ["api_key"],
+}
+
+VOICE_REQUIRED_KEYS = {
     "hume_ai": ["api_key"],
+    "elevenlabs": ["api_key"],
+    "openai_tts": ["api_key"],
 }
 
 T = TypeVar("T")
@@ -118,6 +123,19 @@ def validate_config(config: dict[str, Any], path: Path) -> None:
         for key in keys:
             if not section_data.get(key):
                 missing.append(f"[{section}].{key}")
+    voice_provider = str(config.get("voice", {}).get("provider", "hume_ai"))
+    try:
+        from providers.registry import get_voice_provider_info
+
+        provider_info = get_voice_provider_info(voice_provider)
+    except Exception:
+        provider_info = None
+    voice_key = provider_info.key if provider_info is not None else "hume_ai"
+    voice_keys = VOICE_REQUIRED_KEYS.get(voice_key, [])
+    voice_section = config.get(voice_key, {})
+    for key in voice_keys:
+        if not voice_section.get(key):
+            missing.append(f"[{voice_key}].{key}")
     if missing:
         raise SystemExit(f"Missing required config keys in {path}: {', '.join(missing)}.")
 

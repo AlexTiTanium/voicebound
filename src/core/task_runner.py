@@ -178,6 +178,7 @@ class TaskRunner(Generic[T]):
         retrying = self._make_retrying(spec)
 
         try:
+
             async def _call() -> T:
                 async with self._semaphore:
                     async with self._limiter:
@@ -247,6 +248,7 @@ class TaskRunner(Generic[T]):
         Returns:
             A callable that can be passed to tenacity's before_sleep hook.
         """
+
         def handler(state: RetryCallState) -> None:
             """Invoke the user retry hook with attempt metadata."""
             if not self.hooks.on_retry:

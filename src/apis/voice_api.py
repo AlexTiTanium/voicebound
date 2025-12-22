@@ -77,8 +77,12 @@ class VoicePayload(TypedDict, total=False):
         version: Provider-specific model version.
         utterances: List of utterance entries to synthesize.
         text: Text to synthesize (provider-specific).
+        input: Text to synthesize (OpenAI TTS).
         model_id: Provider-specific model identifier.
         voice_id: Provider-specific voice identifier.
+        voice: Provider-specific voice selection (OpenAI TTS).
+        response_format: Output format for OpenAI TTS.
+        instructions: Optional voice direction for OpenAI TTS.
 
     Example:
         >>> payload: VoicePayload = {
@@ -96,8 +100,12 @@ class VoicePayload(TypedDict, total=False):
     version: str
     utterances: list[VoiceUtterance]
     text: str
+    input: str
     model_id: str
     voice_id: str
+    voice: str
+    response_format: str
+    instructions: str
 
 
 VoiceResult = tuple[str, Literal["ok", "error"]]
@@ -115,6 +123,8 @@ class VoiceSettings:
         split_utterances: Whether to let the provider split utterances.
         octave_version: Provider-specific model version.
         max_elapsed_seconds: Optional request timeout.
+        enabled_acting_instruction: Whether to generate acting instructions.
+        acting_instruction_model: Model to use when generating acting instructions.
 
     Example:
         >>> settings = VoiceSettings(
@@ -124,6 +134,8 @@ class VoiceSettings:
         ...     split_utterances=True,
         ...     octave_version="2",
         ...     max_elapsed_seconds=None,
+        ...     enabled_acting_instruction=False,
+        ...     acting_instruction_model="gpt-5-nano",
         ... )
     """
 
@@ -133,6 +145,8 @@ class VoiceSettings:
     split_utterances: bool
     octave_version: str
     max_elapsed_seconds: float | None
+    enabled_acting_instruction: bool = False
+    acting_instruction_model: str = "gpt-5-nano"
 
 
 class VoiceService:
@@ -223,15 +237,15 @@ class VoiceService:
         async with httpx.AsyncClient() as client:
             for key, text in worklist:
                 out_path = output_dir / f"{key}.{settings.audio_format}"
-                payload = self._provider.build_payload(text, settings=settings)
 
-                async def coro(payload=payload, out_path=out_path):
+                async def coro(text=text, out_path=out_path):
                     """
                     Synthesize a single utterance and return the output path.
 
                     Returns:
                         Path to the synthesized audio file.
                     """
+                    payload = await self._build_payload(text, settings)
                     return await self.synthesize_once(
                         client=client,
                         headers=headers,
@@ -295,3 +309,9 @@ class VoiceService:
 
         summary.skipped = skipped_count
         return results
+
+    async def _build_payload(self, text: str, settings: VoiceSettings) -> VoicePayload:
+        build_async = getattr(self._provider, "build_payload_async", None)
+        if callable(build_async):
+            return await build_async(text, settings=settings)
+        return self._provider.build_payload(text, settings=settings)

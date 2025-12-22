@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Callable
 from providers.elevenlabs_provider import ElevenLabsVoiceProvider
 from providers.hume_provider import HumeVoiceProvider
 from providers.openai_provider import OpenAITranslationProvider
+from providers.openai_tts_provider import OpenAITTSVoiceProvider
 
 if TYPE_CHECKING:
     from providers.types import TranslationProvider, VoiceProvider
@@ -39,8 +40,9 @@ class VoiceProviderInfo:
     key: str
     name: str
     default_model: str
+    default_voice_name: str
     default_rpm: int
-    factory: Callable[[], VoiceProvider]
+    factory: Callable[[str], VoiceProvider]
 
 
 _TRANSLATION_PROVIDERS: dict[str, TranslationProviderInfo] = {
@@ -58,21 +60,34 @@ _VOICE_PROVIDERS: dict[str, VoiceProviderInfo] = {
         key="elevenlabs",
         name="elevenlabs",
         default_model=ElevenLabsVoiceProvider.default_model,
+        default_voice_name="VOICE_ID",
         default_rpm=ElevenLabsVoiceProvider.default_rpm,
-        factory=ElevenLabsVoiceProvider,
+        factory=lambda _api_key: ElevenLabsVoiceProvider(),
     ),
     "hume_ai": VoiceProviderInfo(
         key="hume_ai",
         name="hume_ai",
         default_model=HumeVoiceProvider.default_model,
+        default_voice_name="ivan",
         default_rpm=HumeVoiceProvider.default_rpm,
-        factory=HumeVoiceProvider,
+        factory=lambda _api_key: HumeVoiceProvider(),
+    ),
+    "openai_tts": VoiceProviderInfo(
+        key="openai_tts",
+        name="openai_tts",
+        default_model=OpenAITTSVoiceProvider.default_model,
+        default_voice_name="onyx",
+        default_rpm=OpenAITTSVoiceProvider.default_rpm,
+        factory=OpenAITTSVoiceProvider,
     ),
 }
 
 _ALIASES: dict[str, str] = {
     "open_ai": "openai",
     "openia": "openai",
+    "openai-tts": "openai_tts",
+    "openai_tts": "openai_tts",
+    "openai-voice": "openai_tts",
     "11labs": "elevenlabs",
     "eleven-labs": "elevenlabs",
     "elevenlab": "elevenlabs",

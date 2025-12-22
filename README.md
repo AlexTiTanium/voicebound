@@ -15,7 +15,7 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 
 ## Configuration
 - Start from the sample: `cp config.example.toml config.toml` and add your API keys (do not commit secrets).
-- Required keys: `[openai].api_key` for translation, `[hume_ai].api_key` for voice.
+- Required keys: `[openai].api_key` for translation, plus the voice provider key you select (`[hume_ai]`, `[elevenlabs]`, or `[openai_tts]`).
 - Config resolution order: `--config-path` > `VOICEBOUND_CONFIG` > `./config.toml` > `~/.config/voicebound/config.toml`.
 
 ## CLI usage
@@ -23,9 +23,9 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 - Translate (OpenAI):
   - `voicebound translate --input-file strings.xml --output-file out/values/strings.xml`
   - Common overrides: `--allowed-regex "^keep"`, `--ignore-regex "skip"`, `--dry-run` (estimates tokens only), `--target-language "Spanish"`, `--max-workers 10`.
-- Voice (Hume):
+- Voice:
   - `voicebound voice --input-file .cache/progress.json --output-dir out/hume`
-  - Common overrides: `--allowed-regex "^keep"`, `--ignore-regex "skip"`, `--stop-after 10`, `--audio-format wav`, `--provider HUME_AI`.
+  - Common overrides: `--allowed-regex "^keep"`, `--ignore-regex "skip"`, `--stop-after 10`, `--audio-format wav`, `--provider HUME_AI` or `--provider OPENAI_TTS`.
 - Completion/help: `voicebound --help`, `voicebound translate --help`, `voicebound voice --help`.
 
 ## Project layout
@@ -44,7 +44,7 @@ Utilities for translating Android-style `strings.xml` files and generating TTS a
 
 ## Troubleshooting
 - “Config not found”: verify `--config-path` or `VOICEBOUND_CONFIG` and that `config.toml` exists.
-- “Missing required config keys”: set `[openai].api_key` and `[hume_ai].api_key` (non-empty).
+- “Missing required config keys”: set `[openai].api_key` and the chosen voice provider's `api_key` (non-empty).
 - Rate limits / retries: tune `[voice].request_delay_seconds`, `[voice].backoff_seconds`, `[voice].jitter_fraction`, `[voice].max_elapsed_seconds`.
 - Interrupts: Ctrl+C stops translation/voice quickly; partial progress remains in `.cache/progress.json`.
 - Logs vs progress: logs go to stderr; progress bars use stdout. Add `--no-color` if your terminal strips ANSI.
