@@ -81,6 +81,32 @@ def test_hume_provider_builds_headers_and_payload():
     assert payload["utterances"][0]["voice"]["provider"] == "HUME_AI"
 
 
+def test_hume_provider_payload_schema():
+    provider = hume_provider.HumeVoiceProvider()
+    voice_settings = VoiceSettings(
+        model="octave",
+        voice_name="ivan",
+        audio_format="mp3",
+        split_utterances=True,
+        octave_version="2",
+        max_elapsed_seconds=None,
+    )
+
+    payload = provider.build_payload("Hello", settings=voice_settings)
+
+    assert set(payload.keys()) == {"model", "format", "split_utterances", "version", "utterances"}
+    assert payload["format"] == {"type": "mp3"}
+    assert isinstance(payload["utterances"], list)
+    assert len(payload["utterances"]) == 1
+
+    utterance = payload["utterances"][0]
+    assert set(utterance.keys()) == {"text", "voice"}
+    assert utterance["text"] == "Hello"
+    assert set(utterance["voice"].keys()) == {"name", "provider"}
+    assert utterance["voice"]["name"] == "ivan"
+    assert utterance["voice"]["provider"] == hume_provider.VOICE_PROVIDER_ENUM
+
+
 def test_hume_provider_send_request_uses_client():
     provider = hume_provider.HumeVoiceProvider()
     calls = {}
