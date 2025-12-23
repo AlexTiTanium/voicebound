@@ -9,6 +9,7 @@ import pytest
 from commands import ai_translate, ai_voice
 from core.summary_reporter import SummaryReporter
 from core.task_runner import RetryConfig
+from core.types import AudioFormat, TranslationSummaryStatus
 from utils.command_utils import ProviderSettings
 
 if TYPE_CHECKING:
@@ -57,12 +58,12 @@ def test_translate_strings_no_provider(monkeypatch, tmp_path):
 
 def test_summarize_results_counts():
     results: list["TranslationResult"] = [
-        ("a", "x", "translated"),
-        ("b", "x", "skipped"),
-        ("c", "x", "loaded"),
-        ("d", "x", "ignored"),
-        ("e", "x", "empty"),
-        ("f", None, ("error", "boom")),
+        ("a", "x", TranslationSummaryStatus.TRANSLATED),
+        ("b", "x", TranslationSummaryStatus.SKIPPED),
+        ("c", "x", TranslationSummaryStatus.LOADED),
+        ("d", "x", TranslationSummaryStatus.IGNORED),
+        ("e", "x", TranslationSummaryStatus.EMPTY),
+        ("f", None, (TranslationSummaryStatus.ERROR, "boom")),
     ]
     summary = ai_translate._summarize_results(results)
     assert summary["translated"] == 1
@@ -157,7 +158,7 @@ def test_run_voice_async_builds_voice_settings(tmp_path):
         ai_voice._run_voice_async,
         [("keep_one", "Hello")],
         output_dir,
-        "mp3",
+        AudioFormat.MP3,
         "octave",
         "ivan",
         True,

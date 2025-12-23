@@ -14,6 +14,7 @@ from loguru import logger
 
 from core.command_context import run_with_progress
 from core.task_runner import TaskHooks, TaskSpec
+from core.types import TranslationSummaryStatus
 from utils.command_utils import ProviderSettings, build_runner, build_task_specs, persist_progress
 
 if TYPE_CHECKING:
@@ -42,10 +43,9 @@ class TokenEncoder(Protocol):
         ...
 
 
-StatusLiteral = Literal["ignored", "empty", "loaded", "skipped", "translated"]
-DryRunStatus = tuple[Literal["dry-run"], int, str]
-ErrorStatus = tuple[Literal["error"], str]
-TranslationStatus = StatusLiteral | DryRunStatus | ErrorStatus
+DryRunStatus = tuple[Literal[TranslationSummaryStatus.DRY_RUN], int, str]
+ErrorStatus = tuple[Literal[TranslationSummaryStatus.ERROR], str]
+TranslationStatus = TranslationSummaryStatus | DryRunStatus | ErrorStatus
 TranslationResult = tuple[str, str | None, TranslationStatus]
 
 
@@ -209,19 +209,19 @@ class TranslationService:
             matches_regex = bool(filters.allowed_pattern.match(name))
 
             if filters.ignore_pattern.match(name):
-                pre_results.append((name, None, "ignored"))
+                pre_results.append((name, None, TranslationSummaryStatus.IGNORED))
                 continue
 
             if not original:
-                pre_results.append((name, None, "empty"))
+                pre_results.append((name, None, TranslationSummaryStatus.EMPTY))
                 continue
 
             if name in done:
-                pre_results.append((name, clean_text(done[name]), "loaded"))
+                pre_results.append((name, clean_text(done[name]), TranslationSummaryStatus.LOADED))
                 continue
 
             if not matches_regex:
-                pre_results.append((name, clean_text(original), "skipped"))
+                pre_results.append((name, clean_text(original), TranslationSummaryStatus.SKIPPED))
                 continue
 
             translate_nodes.append(node)
@@ -240,7 +240,11 @@ class TranslationService:
             results: Iterable of TranslationResult tuples containing (name, text, status).
         """
         for name, text, status in results:
-            if status in ("translated", "loaded", "skipped"):
+            if status in (
+                TranslationSummaryStatus.TRANSLATED,
+                TranslationSummaryStatus.LOADED,
+                TranslationSummaryStatus.SKIPPED,
+            ):
                 text = clean_text(text)
                 for node in root.findall("string"):
                     if node.get("name") == name and text is not None:
@@ -274,11 +278,11 @@ class TranslationService:
 
         if filters.ignore_pattern.match(name):
             logger.debug(f"[SKIP] {name} matched ignore regex.")
-            return name, None, "ignored"
+            return name, None, TranslationSummaryStatus.IGNORED
 
         if not original:
             logger.debug(f"[SKIP] {name} has no content.")
-            return name, None, "empty"
+            return name, None, TranslationSummaryStatus.EMPTY
 
         orig_tokens = count_tokens(encoding, original) if encoding else 0
 
@@ -286,15 +290,15 @@ class TranslationService:
             suffix = "" if matches_regex else " (bypassing translate regex)"
             logger.info(f"[CACHE] {name} loaded{suffix}.")
             translated = clean_text(progress.done[name])
-            return name, translated, "loaded"
+            return name, translated, TranslationSummaryStatus.LOADED
 
         if not matches_regex:
             logger.debug(f"[SKIP] {name} does not match translate regex.")
-            return name, clean_text(original), "skipped"
+            return name, clean_text(original), TranslationSummaryStatus.SKIPPED
 
         if settings.dry_run:
             logger.debug(f"[DRY] {name} tokens={orig_tokens} preview='{original[:80]}'")
-            return name, None, ("dry-run", orig_tokens, original[:80])
+            return name, None, (TranslationSummaryStatus.DRY_RUN, orig_tokens, original[:80])
 
         if orig_tokens:
             logger.debug(f"[TRANSLATE] {name} — {orig_tokens} tokens.")
@@ -305,7 +309,7 @@ class TranslationService:
             translated = self.translate_text(original, settings.model, settings.target_language)
         except Exception as exc:  # pragma: no cover - API failure surface
             logger.error(f"[ERROR] {name} translation failed: {exc}")
-            return name, None, ("error", str(exc))
+            return name, None, (TranslationSummaryStatus.ERROR, str(exc))
         translated = clean_text(translated)
 
         with progress.progress_lock:
@@ -313,7 +317,7 @@ class TranslationService:
             persist_progress(progress.progress_file, progress.done)
 
         logger.debug(f"[SAVED] {name} progress updated in {progress.progress_file}.")
-        return name, translated, "translated"
+        return name, translated, TranslationSummaryStatus.TRANSLATED
 
     async def translate_nodes_async(
         self,
@@ -437,8 +441,8 @@ class TranslationService:
                 spec: TaskSpec identifying the node.
                 exc: Exception raised by the provider call.
             """
-            results.append((spec.task_id, None, ("error", str(exc))))
-            summary.record_translation("error", spec.task_id)
+            results.append((spec.task_id, None, (TranslationSummaryStatus.ERROR, str(exc))))
+            summary.record_translation(TranslationSummaryStatus.ERROR, spec.task_id)
 
         await run_with_progress(
             "translate",

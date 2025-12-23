@@ -11,7 +11,13 @@ from typing import Any, Mapping, TypeVar
 import toml
 from loguru import logger
 
-from core.types import ConfigKey, ConfigSection, ProviderKey
+from core.types import (
+    ConfigKey,
+    ConfigSection,
+    ProviderKey,
+    TranslationProviderKey,
+    VoiceProviderKey,
+)
 
 # Project paths
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -21,13 +27,13 @@ DEFAULT_XDG_CONFIG = (
 )
 
 REQUIRED_CONFIG: dict[ProviderKey, list[ConfigKey]] = {
-    "openai": ["api_key"],
+    TranslationProviderKey.OPENAI: ["api_key"],
 }
 
 VOICE_REQUIRED_KEYS: dict[ProviderKey, list[ConfigKey]] = {
-    "hume_ai": ["api_key"],
-    "elevenlabs": ["api_key"],
-    "openai_tts": ["api_key"],
+    VoiceProviderKey.HUME_AI: ["api_key"],
+    VoiceProviderKey.ELEVENLABS: ["api_key"],
+    VoiceProviderKey.OPENAI_TTS: ["api_key"],
 }
 
 T = TypeVar("T")
@@ -132,7 +138,7 @@ def validate_config(config: dict[str, Any], path: Path) -> None:
         provider_info = get_voice_provider_info(voice_provider)
     except Exception:
         provider_info = None
-    voice_key = provider_info.key if provider_info is not None else "hume_ai"
+    voice_key = provider_info.key if provider_info is not None else VoiceProviderKey.HUME_AI
     voice_keys = VOICE_REQUIRED_KEYS.get(voice_key, [])
     voice_section = config.get(voice_key, {})
     for key in voice_keys:

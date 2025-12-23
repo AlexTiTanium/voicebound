@@ -6,6 +6,7 @@ import pytest
 import typer
 
 from commands import ai_voice
+from core.types import AudioFormat
 
 
 class DummyCtx:
@@ -385,7 +386,7 @@ def test_voice_typer_command(monkeypatch, tmp_path):
         allowed_regex="^keep",
         ignore_regex="",
         stop_after=1,
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
     )
     assert called["ok"]["input_file"] == tmp_path / "tmp-cache/progress.json"
 

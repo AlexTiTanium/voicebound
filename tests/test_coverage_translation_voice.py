@@ -16,6 +16,7 @@ from apis.translation_api import (
 from apis.voice_api import VoicePayload, VoiceService, VoiceSettings
 from core.summary_reporter import SummaryReporter
 from core.task_runner import RetryConfig
+from core.types import AudioFormat, TranslationSummaryStatus
 from providers.types import TranslationProvider, VoiceProvider
 from utils.command_utils import ProviderSettings
 
@@ -72,7 +73,7 @@ def test_process_node_branches(tmp_path):
         settings=settings,
         encoding=None,
     )
-    assert ignored[2] == "ignored"
+    assert ignored[2] == TranslationSummaryStatus.IGNORED
 
     empty = service._process_node(
         _make_node("keep_empty", ""),
@@ -81,7 +82,7 @@ def test_process_node_branches(tmp_path):
         settings=settings,
         encoding=None,
     )
-    assert empty[2] == "empty"
+    assert empty[2] == TranslationSummaryStatus.EMPTY
 
     loaded = service._process_node(
         _make_node("other", "Hello"),
@@ -90,7 +91,7 @@ def test_process_node_branches(tmp_path):
         settings=settings,
         encoding=None,
     )
-    assert loaded[2] == "loaded"
+    assert loaded[2] == TranslationSummaryStatus.LOADED
 
     skipped = service._process_node(
         _make_node("nope", "Hello"),
@@ -99,7 +100,7 @@ def test_process_node_branches(tmp_path):
         settings=settings,
         encoding=None,
     )
-    assert skipped[2] == "skipped"
+    assert skipped[2] == TranslationSummaryStatus.SKIPPED
 
 
 def test_translate_nodes_async_requires_provider_settings(tmp_path):
@@ -207,7 +208,7 @@ def test_translate_nodes_async_dry_run_records_non_tuple(tmp_path):
 
     results = anyio.run(_run)
 
-    assert results[0][2] == "ignored"
+    assert results[0][2] == TranslationSummaryStatus.IGNORED
     assert summary.ignored == 1
 
 
@@ -332,7 +333,7 @@ class DummyVoiceProvider:
 def _voice_payload(text: str) -> VoicePayload:
     return {
         "model": "octave",
-        "format": {"type": "mp3"},
+        "format": {"type": AudioFormat.MP3},
         "split_utterances": True,
         "version": "2",
         "utterances": [{"text": text, "voice": {"name": "ivan", "provider": "HUME_AI"}}],
@@ -413,7 +414,7 @@ def test_run_voice_async_success_and_skip(tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -445,7 +446,7 @@ def test_run_voice_async_failure_records_error(monkeypatch, tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -504,7 +505,7 @@ def test_run_voice_async_retries_and_logs(monkeypatch, tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -559,7 +560,7 @@ def test_run_voice_async_requires_provider_settings(tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -599,7 +600,7 @@ def test_voice_service_build_payload_uses_async_provider(tmp_path):
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,

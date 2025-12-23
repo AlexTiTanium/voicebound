@@ -7,8 +7,9 @@ if TYPE_CHECKING:
     import httpx
 
     from apis.voice_api import VoicePayload, VoiceSettings
-    from core.types import HumeVoiceProviderEnum, VoiceProviderKey
     from utils.command_utils import ProviderSettings
+
+from core.types import HumeVoiceProviderEnum, VoiceProviderKey
 
 API_URL = "https://api.hume.ai/v0/tts/file"
 VOICE_PROVIDER_ENUM: HumeVoiceProviderEnum = "HUME_AI"
@@ -25,8 +26,8 @@ class HumeVoiceProvider:
         >>> provider = HumeVoiceProvider()
     """
 
-    key: VoiceProviderKey = "hume_ai"
-    name: VoiceProviderKey = "hume_ai"
+    key: VoiceProviderKey = VoiceProviderKey.HUME_AI
+    name: VoiceProviderKey = VoiceProviderKey.HUME_AI
     default_model: str = "octave"
     default_rpm: int = 10
     api_url: str = API_URL

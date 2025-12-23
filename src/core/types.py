@@ -1,9 +1,30 @@
 from __future__ import annotations
 
+from enum import StrEnum
 from typing import Literal, TypeAlias
 
-TranslationProviderKey: TypeAlias = Literal["openai"]
-VoiceProviderKey: TypeAlias = Literal["elevenlabs", "hume_ai", "openai_tts"]
+
+class TranslationSummaryStatus(StrEnum):
+    TRANSLATED = "translated"
+    SKIPPED = "skipped"
+    LOADED = "loaded"
+    IGNORED = "ignored"
+    EMPTY = "empty"
+    ERROR = "error"
+    DRY_RUN = "dry-run"
+
+class AudioFormat(StrEnum):
+    MP3 = "mp3"
+    WAV = "wav"
+
+class TranslationProviderKey(StrEnum):
+    OPENAI = "openai"
+
+class VoiceProviderKey(StrEnum):
+    ELEVENLABS = "elevenlabs"
+    HUME_AI = "hume_ai"
+    OPENAI_TTS = "openai_tts"
+
 ProviderKey: TypeAlias = TranslationProviderKey | VoiceProviderKey
 
 TranslationProviderAlias: TypeAlias = Literal["open_ai", "openia"]
@@ -69,18 +90,7 @@ ProviderConfigKey: TypeAlias = Literal[
 ]
 ConfigKey: TypeAlias = RetryConfigKey | TranslateConfigKey | VoiceConfigKey | ProviderConfigKey
 
-AudioFormat: TypeAlias = Literal["mp3", "wav"]
 HumeVoiceProviderEnum: TypeAlias = Literal["HUME_AI"]
-
-TranslationSummaryStatus: TypeAlias = Literal[
-    "translated",
-    "skipped",
-    "loaded",
-    "ignored",
-    "empty",
-    "error",
-    "dry-run",
-]
 
 TranslationPromptKey: TypeAlias = Literal["literary_v1"]
 ActingInstructionPromptKey: TypeAlias = Literal[
@@ -93,4 +103,35 @@ ActingInstructionPromptKey: TypeAlias = Literal[
     "zh_director_v1",
     "uk_director_v1",
     "ru_director_v1",
+]
+
+ElevenLabsModel: TypeAlias = Literal[
+    "eleven_multilingual_v2",
+    "eleven_monolingual_v1",
+    "eleven_turbo_v2",
+    "eleven_turbo_v2_5",
+]
+
+OpenAITranslationModel: TypeAlias = Literal[
+    "gpt-4o",
+    "gpt-4-turbo",
+    "gpt-3.5-turbo",
+    "gpt-5-nano",
+]
+
+HumeModel: TypeAlias = Literal["octave"]
+
+OpenAITTSModel: TypeAlias = Literal[
+    "tts-1",
+    "tts-1-hd",
+    "gpt-4o-mini-tts-2025-12-15",
+]
+
+OpenAITTSVoice: TypeAlias = Literal[
+    "alloy",
+    "echo",
+    "fable",
+    "onyx",
+    "nova",
+    "shimmer",
 ]

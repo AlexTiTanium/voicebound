@@ -5,6 +5,7 @@ import pytest
 
 from apis.voice_api import VoicePayload, VoiceSettings
 from core.task_runner import RetryConfig
+from core.types import AudioFormat, TranslationProviderKey, VoiceProviderKey
 from prompts.acting_instructions import (
     DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY,
     get_acting_instruction_prompt,
@@ -114,7 +115,7 @@ def test_hume_provider_builds_headers_and_payload():
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -125,7 +126,7 @@ def test_hume_provider_builds_headers_and_payload():
 
     assert headers["X-Hume-Api-Key"] == "hume-key"
     assert payload["model"] == "octave"
-    assert payload["format"]["type"] == "mp3"
+    assert payload["format"]["type"] == AudioFormat.MP3
     assert payload["split_utterances"] is True
     assert payload["version"] == "2"
     assert payload["utterances"][0]["text"] == "hello"
@@ -138,7 +139,7 @@ def test_hume_provider_payload_schema():
     voice_settings = VoiceSettings(
         model="octave",
         voice_name="ivan",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -147,7 +148,7 @@ def test_hume_provider_payload_schema():
     payload = provider.build_payload("Hello", settings=voice_settings)
 
     assert set(payload.keys()) == {"model", "format", "split_utterances", "version", "utterances"}
-    assert payload["format"] == {"type": "mp3"}
+    assert payload["format"] == {"type": AudioFormat.MP3}
     assert isinstance(payload["utterances"], list)
     assert len(payload["utterances"]) == 1
 
@@ -176,7 +177,7 @@ def test_hume_provider_send_request_uses_client():
 
     payload: VoicePayload = {
         "model": "octave",
-        "format": {"type": "mp3"},
+        "format": {"type": AudioFormat.MP3},
         "split_utterances": True,
         "version": "2",
         "utterances": [{"text": "hello", "voice": {"name": "ivan", "provider": "HUME_AI"}}],
@@ -211,7 +212,7 @@ def test_elevenlabs_provider_builds_headers_and_payload():
     voice_settings = VoiceSettings(
         model="eleven_multilingual_v2",
         voice_name="voice-id",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -304,7 +305,7 @@ def test_openai_tts_provider_builds_headers_and_payload(monkeypatch):
     voice_settings = VoiceSettings(
         model="gpt-4o-mini-tts-2025-12-15",
         voice_name="onyx",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -321,7 +322,7 @@ def test_openai_tts_provider_builds_headers_and_payload(monkeypatch):
     assert payload["model"] == "gpt-4o-mini-tts-2025-12-15"
     assert payload["input"] == "hello"
     assert payload["voice"] == "onyx"
-    assert payload["response_format"] == "mp3"
+    assert payload["response_format"] == AudioFormat.MP3
     assert "instructions" not in payload
 
 
@@ -336,7 +337,7 @@ def test_openai_tts_provider_generates_instructions_when_enabled(monkeypatch):
     voice_settings = VoiceSettings(
         model="gpt-4o-mini-tts-2025-12-15",
         voice_name="onyx",
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
         split_utterances=True,
         octave_version="2",
         max_elapsed_seconds=None,
@@ -368,7 +369,7 @@ def test_openai_tts_provider_send_request_uses_client(monkeypatch):
         "model": "gpt-4o-mini-tts-2025-12-15",
         "input": "hello",
         "voice": "onyx",
-        "response_format": "mp3",
+        "response_format": AudioFormat.MP3,
         "instructions": "Test",
     }
 
@@ -447,18 +448,18 @@ def test_translation_prompt_registry():
 def test_registry_resolves_aliases_and_missing():
     info = registry.get_translation_provider_info("Open_AI")
     assert info is not None
-    assert info.key == "openai"
+    assert info.key == TranslationProviderKey.OPENAI
 
     voice_info = registry.get_voice_provider_info("hume-ai")
     assert voice_info is not None
-    assert voice_info.key == "hume_ai"
+    assert voice_info.key == VoiceProviderKey.HUME_AI
 
     voice_info = registry.get_voice_provider_info("11labs")
     assert voice_info is not None
-    assert voice_info.key == "elevenlabs"
+    assert voice_info.key == VoiceProviderKey.ELEVENLABS
 
     voice_info = registry.get_voice_provider_info("openai-tts")
     assert voice_info is not None
-    assert voice_info.key == "openai_tts"
+    assert voice_info.key == VoiceProviderKey.OPENAI_TTS
 
     assert registry.get_translation_provider_info(None) is None

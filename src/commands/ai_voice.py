@@ -190,7 +190,7 @@ def generate_voice(
         AudioFormat,
         audio_format
         or provider_cfg.get("audio_format")
-        or voice_cfg.get("audio_format", "mp3"),
+        or voice_cfg.get("audio_format", AudioFormat.MP3),
     )
     allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
@@ -516,7 +516,7 @@ def typer_command(
     allowed_regex: str | None = typer.Option(None, help="Only process keys matching this regex."),
     ignore_regex: str | None = typer.Option(None, help="Skip keys matching this regex."),
     stop_after: int | None = typer.Option(None, help="Stop after N items (0 for no limit)."),
-    audio_format: str | None = typer.Option(
+    audio_format: AudioFormat | None = typer.Option(
         None, help="Audio format extension and API format type."
     ),
     config_path: Path | None = typer.Option(None, help="Path to config.toml."),
@@ -529,7 +529,7 @@ def typer_command(
     log_level = obj.get("log_level")
     color = obj.get("color", True)
     provider_value = cast(ProviderName | None, provider)
-    audio_format_value = cast(AudioFormat | None, audio_format)
+    audio_format_value = audio_format
     generate_voice(
         input_file=input_file,
         output_dir=output_dir,

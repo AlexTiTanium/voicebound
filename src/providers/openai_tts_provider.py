@@ -12,18 +12,25 @@ if TYPE_CHECKING:
     import httpx
 
     from apis.voice_api import VoicePayload, VoiceSettings
-    from core.types import ActingInstructionPromptKey, AudioFormat, VoiceProviderKey
     from utils.command_utils import ProviderSettings
 else:
     import httpx
+
+from core.types import (
+    ActingInstructionPromptKey,
+    AudioFormat,
+    OpenAITTSModel,
+    OpenAITTSVoice,
+    VoiceProviderKey,
+)
 
 API_URL = "https://api.openai.com/v1/audio/speech"
 
 
 class OpenAITTSPayload(TypedDict, total=False):
-    model: str
+    model: OpenAITTSModel
     input: str
-    voice: str
+    voice: OpenAITTSVoice
     response_format: AudioFormat
     instructions: str
 
@@ -42,8 +49,8 @@ class OpenAITTSVoiceProvider:
     api_key: str
     client: AsyncOpenAI = field(init=False)
 
-    key: VoiceProviderKey = "openai_tts"
-    name: VoiceProviderKey = "openai_tts"
+    key: VoiceProviderKey = VoiceProviderKey.OPENAI_TTS
+    name: VoiceProviderKey = VoiceProviderKey.OPENAI_TTS
     default_model: str = "gpt-4o-mini-tts-2025-12-15"
     default_rpm: int = 60
     api_url: str = API_URL
@@ -61,9 +68,9 @@ class OpenAITTSVoiceProvider:
     def build_payload(self, text: str, *, settings: VoiceSettings) -> VoicePayload:
         """Construct the JSON payload for OpenAI TTS."""
         payload: OpenAITTSPayload = {
-            "model": settings.model,
+            "model": cast("OpenAITTSModel", settings.model),
             "input": text,
-            "voice": settings.voice_name,
+            "voice": cast("OpenAITTSVoice", settings.voice_name),
             "response_format": settings.audio_format,
         }
         return cast("VoicePayload", payload)
@@ -141,5 +148,5 @@ def _coerce_tts_payload(payload: "VoicePayload") -> OpenAITTSPayload:
     for key in ("model", "input", "voice", "response_format", "instructions"):
         value = payload.get(key)
         if isinstance(value, str) and value:
-            tts_payload[key] = value
+            tts_payload[key] = cast(Any, value)
     return tts_payload

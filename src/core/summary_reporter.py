@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Iterable
+from typing import Iterable
 
 from loguru import logger
 
-if TYPE_CHECKING:
-    from core.types import TranslationSummaryStatus
+from core.types import TranslationSummaryStatus
 
 
 @dataclass
@@ -19,7 +18,7 @@ class SummaryReporter:
 
     Example:
         >>> reporter = SummaryReporter("translate")
-        >>> reporter.record_translation("translated", "chp1_hello")
+        >>> reporter.record_translation(TranslationSummaryStatus.TRANSLATED, "chp1_hello")
     """
 
     name: str
@@ -39,19 +38,19 @@ class SummaryReporter:
             status: One of "translated", "skipped", "loaded", "ignored", "empty", "error".
             task_id: The identifier of the task (e.g., string name).
         """
-        if status == "translated":
+        if status == TranslationSummaryStatus.TRANSLATED:
             self.successes += 1
-        elif status == "skipped":
+        elif status == TranslationSummaryStatus.SKIPPED:
             self.skipped += 1
-        elif status == "loaded":
+        elif status == TranslationSummaryStatus.LOADED:
             self.loaded += 1
-        elif status == "ignored":
+        elif status == TranslationSummaryStatus.IGNORED:
             self.ignored += 1
-        elif status == "empty":
+        elif status == TranslationSummaryStatus.EMPTY:
             self.empty += 1
-        elif status == "error" and task_id:
+        elif status == TranslationSummaryStatus.ERROR and task_id:
             self.failures.append(task_id)
-        elif status == "dry-run":
+        elif status == TranslationSummaryStatus.DRY_RUN:
             return
 
     def record_success(self, task_id: str | None) -> None:

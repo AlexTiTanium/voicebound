@@ -47,9 +47,9 @@ class VoiceProviderInfo:
 
 
 _TRANSLATION_PROVIDERS: dict[TranslationProviderKey, TranslationProviderInfo] = {
-    "openai": TranslationProviderInfo(
-        key="openai",
-        name="openai",
+    TranslationProviderKey.OPENAI: TranslationProviderInfo(
+        key=TranslationProviderKey.OPENAI,
+        name=TranslationProviderKey.OPENAI,
         default_model=OpenAITranslationProvider.default_model,
         default_rpm=OpenAITranslationProvider.default_rpm,
         factory=OpenAITranslationProvider,
@@ -57,25 +57,25 @@ _TRANSLATION_PROVIDERS: dict[TranslationProviderKey, TranslationProviderInfo] = 
 }
 
 _VOICE_PROVIDERS: dict[VoiceProviderKey, VoiceProviderInfo] = {
-    "elevenlabs": VoiceProviderInfo(
-        key="elevenlabs",
-        name="elevenlabs",
+    VoiceProviderKey.ELEVENLABS: VoiceProviderInfo(
+        key=VoiceProviderKey.ELEVENLABS,
+        name=VoiceProviderKey.ELEVENLABS,
         default_model=ElevenLabsVoiceProvider.default_model,
         default_voice_name="VOICE_ID",
         default_rpm=ElevenLabsVoiceProvider.default_rpm,
         factory=lambda _api_key: ElevenLabsVoiceProvider(),
     ),
-    "hume_ai": VoiceProviderInfo(
-        key="hume_ai",
-        name="hume_ai",
+    VoiceProviderKey.HUME_AI: VoiceProviderInfo(
+        key=VoiceProviderKey.HUME_AI,
+        name=VoiceProviderKey.HUME_AI,
         default_model=HumeVoiceProvider.default_model,
         default_voice_name="ivan",
         default_rpm=HumeVoiceProvider.default_rpm,
         factory=lambda _api_key: HumeVoiceProvider(),
     ),
-    "openai_tts": VoiceProviderInfo(
-        key="openai_tts",
-        name="openai_tts",
+    VoiceProviderKey.OPENAI_TTS: VoiceProviderInfo(
+        key=VoiceProviderKey.OPENAI_TTS,
+        name=VoiceProviderKey.OPENAI_TTS,
         default_model=OpenAITTSVoiceProvider.default_model,
         default_voice_name="onyx",
         default_rpm=OpenAITTSVoiceProvider.default_rpm,
@@ -84,17 +84,17 @@ _VOICE_PROVIDERS: dict[VoiceProviderKey, VoiceProviderInfo] = {
 }
 
 _ALIASES: dict[ProviderAlias, ProviderKey] = {
-    "open_ai": "openai",
-    "openia": "openai",
-    "openai-tts": "openai_tts",
-    "openai_tts": "openai_tts",
-    "openai-voice": "openai_tts",
-    "11labs": "elevenlabs",
-    "eleven-labs": "elevenlabs",
-    "elevenlab": "elevenlabs",
-    "hume": "hume_ai",
-    "humeai": "hume_ai",
-    "hume-ai": "hume_ai",
+    "open_ai": TranslationProviderKey.OPENAI,
+    "openia": TranslationProviderKey.OPENAI,
+    "openai-tts": VoiceProviderKey.OPENAI_TTS,
+    "openai_tts": VoiceProviderKey.OPENAI_TTS,
+    "openai-voice": VoiceProviderKey.OPENAI_TTS,
+    "11labs": VoiceProviderKey.ELEVENLABS,
+    "eleven-labs": VoiceProviderKey.ELEVENLABS,
+    "elevenlab": VoiceProviderKey.ELEVENLABS,
+    "hume": VoiceProviderKey.HUME_AI,
+    "humeai": VoiceProviderKey.HUME_AI,
+    "hume-ai": VoiceProviderKey.HUME_AI,
 }
 
 

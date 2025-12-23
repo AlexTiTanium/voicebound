@@ -14,7 +14,7 @@ from apis.translation_api import (
     TranslationSettings,
 )
 from core.summary_reporter import SummaryReporter
-from core.types import ProviderName
+from core.types import ProviderName, TranslationSummaryStatus
 from providers.registry import get_translation_provider_info
 from utils import (
     PROJECT_ROOT,
@@ -265,7 +265,7 @@ def _print_dry_run(results: Iterable[TranslationResult]) -> None:
 
     for name, data, status in results:
         match status:
-            case ("dry-run", tokens, preview):
+            case (TranslationSummaryStatus.DRY_RUN, tokens, preview):
                 total_tokens += tokens
                 count += 1
                 logger.debug(f"[DRY] {name}: {tokens} tokens → '{preview}...'")
@@ -332,17 +332,17 @@ def _summarize_results(results: Iterable[TranslationResult]) -> Summary:
         "errors": [],
     }
     for name, _text, status in results:
-        if status == "translated":
+        if status == TranslationSummaryStatus.TRANSLATED:
             summary["translated"] += 1
-        elif status == "skipped":
+        elif status == TranslationSummaryStatus.SKIPPED:
             summary["skipped"] += 1
-        elif status == "loaded":
+        elif status == TranslationSummaryStatus.LOADED:
             summary["loaded"] += 1
-        elif status == "ignored":
+        elif status == TranslationSummaryStatus.IGNORED:
             summary["ignored"] += 1
-        elif status == "empty":
+        elif status == TranslationSummaryStatus.EMPTY:
             summary["empty"] += 1
-        elif isinstance(status, tuple) and status[0] == "error":
+        elif isinstance(status, tuple) and status[0] == TranslationSummaryStatus.ERROR:
             if name:
                 summary["errors"].append(name)
     return summary

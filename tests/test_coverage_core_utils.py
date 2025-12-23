@@ -10,6 +10,7 @@ import utils
 from core.command_context import build_tasks, make_command_context, run_with_progress
 from core.summary_reporter import SummaryReporter
 from core.task_runner import RetryConfig, RunnerConfig, TaskHooks, TaskRunner, TaskSpec
+from core.types import AudioFormat, TranslationProviderKey, TranslationSummaryStatus
 from utils.command_utils import (
     OutcomeCollector,
     ProgressReporter,
@@ -39,7 +40,7 @@ def test_make_command_context(tmp_path):
     cfg = _write_config(tmp_path)
     ctx = make_command_context(
         config_path=cfg,
-        provider_key="openai",
+        provider_key=TranslationProviderKey.OPENAI,
         default_model="gpt-5-nano",
         default_rpm=60,
     )
@@ -348,7 +349,7 @@ def test_build_voice_worklist_branches(tmp_path):
         existing_outputs={"existing"},
         stop_after=0,
         output_dir=output_dir,
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
     )
     assert worklist == [("ok", "text")]
 
@@ -365,7 +366,7 @@ def test_build_voice_worklist_stop_after(tmp_path):
         existing_outputs=set(),
         stop_after=1,
         output_dir=output_dir,
-        audio_format="mp3",
+        audio_format=AudioFormat.MP3,
     )
     assert len(worklist) == 1
 
@@ -388,12 +389,12 @@ def test_outcome_collector_and_log_retry():
 
 def test_summary_reporter_paths():
     reporter = SummaryReporter("translate")
-    reporter.record_translation("translated", "a")
-    reporter.record_translation("skipped", "b")
-    reporter.record_translation("loaded", "c")
-    reporter.record_translation("ignored", "d")
-    reporter.record_translation("empty", "e")
-    reporter.record_translation("error", "bad")
+    reporter.record_translation(TranslationSummaryStatus.TRANSLATED, "a")
+    reporter.record_translation(TranslationSummaryStatus.SKIPPED, "b")
+    reporter.record_translation(TranslationSummaryStatus.LOADED, "c")
+    reporter.record_translation(TranslationSummaryStatus.IGNORED, "d")
+    reporter.record_translation(TranslationSummaryStatus.EMPTY, "e")
+    reporter.record_translation(TranslationSummaryStatus.ERROR, "bad")
     reporter.record_success("ok")
     reporter.record_failure("fail")
     reporter.log_translation(output_path="out.xml")
