@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any, TypedDict, cast
 from loguru import logger
 from openai import AsyncOpenAI
 
+from prompts.acting_instructions import get_acting_instruction_prompt
+
 if TYPE_CHECKING:
     import httpx
 
@@ -72,6 +74,7 @@ class OpenAITTSVoiceProvider:
             instructions = await self._generate_acting_instruction(
                 text,
                 model=settings.acting_instruction_model,
+                prompt_key=settings.acting_instruction_prompt_key,
             )
             if instructions:
                 payload["instructions"] = instructions
@@ -91,33 +94,13 @@ class OpenAITTSVoiceProvider:
         content = await _read_binary_response(response)
         return httpx.Response(status_code=200, content=content)
 
-    async def _generate_acting_instruction(self, text: str, *, model: str) -> str:
+    async def _generate_acting_instruction(self, text: str, *, model: str, prompt_key: str) -> str:
         response = await self.client.chat.completions.create(
             model=model,
             messages=[
                 {
                     "role": "system",
-                    "content": (
-                        "Ты — режиссёр озвучивания и специалист по дикции.\n\n"
-                        "Тебе даётся текст на русском языке.\n"
-                        "Твоя задача — создать краткую и точную инструкцию для синтеза речи, "
-                        "описывающую КАК именно должен быть озвучен ЭТОТ текст.\n\n"
-                        "Проанализируй текст и определи:\n"
-                        "— тип (повествование, диалог, монолог, описание, напряжённая сцена, "
-                        "спокойная сцена)\n"
-                        "— эмоциональный тон (спокойный, напряжённый, драматичный, "
-                        "ироничный и т.д.)\n"
-                        "— рекомендуемый темп речи\n"
-                        "— характер пауз\n"
-                        "— степень актёрской выразительности\n\n"
-                        "Требования:\n"
-                        "— инструкция должна быть на русском языке\n"
-                        "— инструкция должна быть краткой (4–8 строк)\n"
-                        "— не пересказывай текст\n"
-                        "— не добавляй собственный сюжет\n"
-                        "— не упоминай модель, API или технические детали\n"
-                        "— используй формулировки, подходящие для профессионального диктора"
-                    ),
+                    "content": get_acting_instruction_prompt(prompt_key),
                 },
                 {"role": "user", "content": text},
             ],

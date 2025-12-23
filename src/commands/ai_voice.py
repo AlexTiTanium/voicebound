@@ -172,6 +172,12 @@ def generate_voice(
             voice_cfg.get("acting_instruction_model", "gpt-5-nano"),
         )
     )
+    acting_instruction_prompt_key = str(
+        provider_cfg.get(
+            "acting_instruction_prompt_key",
+            voice_cfg.get("acting_instruction_prompt_key", "en_director_v1"),
+        )
+    )
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
     output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
@@ -301,6 +307,7 @@ def generate_voice(
             octave_version,
             enabled_acting_instruction,
             acting_instruction_model,
+            acting_instruction_prompt_key,
             max_elapsed_seconds,
             api_provider_client,
             provider_settings,
@@ -439,6 +446,7 @@ async def _run_voice_async(
     octave_version: str,
     enabled_acting_instruction: bool,
     acting_instruction_model: str,
+    acting_instruction_prompt_key: str,
     max_elapsed_seconds: float | None,
     api_provider: VoiceProvider,
     provider_settings: ProviderSettings,
@@ -458,6 +466,7 @@ async def _run_voice_async(
         octave_version: Provider-specific voice model version.
         enabled_acting_instruction: Whether to auto-generate acting instructions.
         acting_instruction_model: Model to use for acting instructions.
+        acting_instruction_prompt_key: Prompt key for acting instructions.
         max_elapsed_seconds: Optional per-request timeout.
         api_provider: Provider implementation instance.
         provider_settings: API key, model, RPM, and retry settings.
@@ -476,6 +485,7 @@ async def _run_voice_async(
         max_elapsed_seconds=max_elapsed_seconds,
         enabled_acting_instruction=enabled_acting_instruction,
         acting_instruction_model=acting_instruction_model,
+        acting_instruction_prompt_key=acting_instruction_prompt_key,
     )
     service = VoiceService(api_provider, provider_settings=provider_settings)
     return await service.run_voice_async(

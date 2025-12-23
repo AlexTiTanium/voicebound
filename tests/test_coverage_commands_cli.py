@@ -164,6 +164,7 @@ def test_run_voice_async_builds_voice_settings(tmp_path):
         "2",
         False,
         "gpt-5-nano",
+        "ru_director_v1",
         None,
         provider,
         settings,

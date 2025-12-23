@@ -11,6 +11,7 @@ voice_name = "onyx"
 audio_format = "mp3"
 enabled_acting_instruction = true
 acting_instruction_model = "gpt-5-nano"
+acting_instruction_prompt_key = "en_director_v1"
 rpm = 400
 concurrency = 20
 acting_input_rate_per_1m = 0.05

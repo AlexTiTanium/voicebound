@@ -5,6 +5,10 @@ import pytest
 
 from apis.voice_api import VoicePayload, VoiceSettings
 from core.task_runner import RetryConfig
+from prompts.acting_instructions import (
+    DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY,
+    get_acting_instruction_prompt,
+)
 from providers import (
     elevenlabs_provider,
     hume_provider,
@@ -413,6 +417,14 @@ def test_openai_tts_binary_response_wrapper():
     assert wrapper.status_code == 200
     assert wrapper.text == ""
     assert wrapper.content == b"data"
+
+
+def test_acting_instruction_prompt_registry():
+    prompt = get_acting_instruction_prompt(DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY)
+    assert "voice director" in prompt.lower()
+
+    with pytest.raises(ValueError):
+        get_acting_instruction_prompt("missing-key")
 
 
 def test_registry_resolves_aliases_and_missing():

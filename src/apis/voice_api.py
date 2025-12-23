@@ -125,6 +125,7 @@ class VoiceSettings:
         max_elapsed_seconds: Optional request timeout.
         enabled_acting_instruction: Whether to generate acting instructions.
         acting_instruction_model: Model to use when generating acting instructions.
+        acting_instruction_prompt_key: Prompt key for acting instruction generation.
 
     Example:
         >>> settings = VoiceSettings(
@@ -136,6 +137,7 @@ class VoiceSettings:
         ...     max_elapsed_seconds=None,
         ...     enabled_acting_instruction=False,
         ...     acting_instruction_model="gpt-5-nano",
+        ...     acting_instruction_prompt_key="en_director_v1",
         ... )
     """
 
@@ -147,6 +149,7 @@ class VoiceSettings:
     max_elapsed_seconds: float | None
     enabled_acting_instruction: bool = False
     acting_instruction_model: str = "gpt-5-nano"
+    acting_instruction_prompt_key: str = "en_director_v1"
 
 
 class VoiceService:
