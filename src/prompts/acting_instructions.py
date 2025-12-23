@@ -1,10 +1,15 @@
 from __future__ import annotations
 
-from typing import Final
+from typing import TYPE_CHECKING, Final, cast
 
-DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY: Final[str] = "en_director_v1"
+if TYPE_CHECKING:
+    from core.types import ActingInstructionPromptKey
 
-ACTING_INSTRUCTION_PROMPTS: dict[str, str] = {
+DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY: Final["ActingInstructionPromptKey"] = "en_director_v1"
+
+ACTING_INSTRUCTION_PROMPTS = cast(
+    "dict[ActingInstructionPromptKey, str]",
+    {
     "en_director_v1": (
         "You are a voice director and diction specialist.\n\n"
         "Given a text in English, analyze it and produce a brief, precise professional "
@@ -267,7 +272,8 @@ ACTING_INSTRUCTION_PROMPTS: dict[str, str] = {
         "однозначного выбора, выбери наиболее вероятный по смыслу текста вариант "
         "и укажи его. Не оставляй поля пустыми."
     ),
-}
+    },
+)
 
 
 def get_acting_instruction_prompt(key: str | None) -> str:
@@ -278,10 +284,9 @@ def get_acting_instruction_prompt(key: str | None) -> str:
         ValueError: If the key is unknown.
     """
     prompt_key = key or DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY
-    try:
-        return ACTING_INSTRUCTION_PROMPTS[prompt_key]
-    except KeyError as exc:
+    if prompt_key not in ACTING_INSTRUCTION_PROMPTS:
         options = ", ".join(sorted(ACTING_INSTRUCTION_PROMPTS.keys()))
         raise ValueError(
             f"Unknown acting instruction prompt key '{prompt_key}'. Available: {options}."
-        ) from exc
+        )
+    return ACTING_INSTRUCTION_PROMPTS[cast("ActingInstructionPromptKey", prompt_key)]

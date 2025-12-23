@@ -15,7 +15,7 @@ from utils.command_utils import ProviderSettings, build_runner, build_task_specs
 
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
-    from core.types import AudioFormat, HumeVoiceProviderEnum
+    from core.types import ActingInstructionPromptKey, AudioFormat, HumeVoiceProviderEnum
     from providers.types import VoiceProvider
 
 
@@ -150,7 +150,7 @@ class VoiceSettings:
     max_elapsed_seconds: float | None
     enabled_acting_instruction: bool = False
     acting_instruction_model: str = "gpt-5-nano"
-    acting_instruction_prompt_key: str = "en_director_v1"
+    acting_instruction_prompt_key: "ActingInstructionPromptKey" = "en_director_v1"
 
 
 class VoiceService:

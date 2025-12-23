@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TypedDict, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import anyio
 import tiktoken
@@ -25,6 +25,9 @@ from utils.command_utils import (
     load_progress,
     load_provider_settings,
 )
+
+if TYPE_CHECKING:
+    from core.types import ActingInstructionPromptKey
 
 
 class VoiceSummary(TypedDict):
@@ -173,7 +176,8 @@ def generate_voice(
             voice_cfg.get("acting_instruction_model", "gpt-5-nano"),
         )
     )
-    acting_instruction_prompt_key = str(
+    acting_instruction_prompt_key = cast(
+        "ActingInstructionPromptKey",
         provider_cfg.get(
             "acting_instruction_prompt_key",
             voice_cfg.get("acting_instruction_prompt_key", "en_director_v1"),
@@ -450,7 +454,7 @@ async def _run_voice_async(
     octave_version: str,
     enabled_acting_instruction: bool,
     acting_instruction_model: str,
-    acting_instruction_prompt_key: str,
+    acting_instruction_prompt_key: "ActingInstructionPromptKey",
     max_elapsed_seconds: float | None,
     api_provider: VoiceProvider,
     provider_settings: ProviderSettings,

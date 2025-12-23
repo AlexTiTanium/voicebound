@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     import httpx
 
     from apis.voice_api import VoicePayload, VoiceSettings
-    from core.types import AudioFormat, VoiceProviderKey
+    from core.types import ActingInstructionPromptKey, AudioFormat, VoiceProviderKey
     from utils.command_utils import ProviderSettings
 else:
     import httpx
@@ -95,7 +95,9 @@ class OpenAITTSVoiceProvider:
         content = await _read_binary_response(response)
         return httpx.Response(status_code=200, content=content)
 
-    async def _generate_acting_instruction(self, text: str, *, model: str, prompt_key: str) -> str:
+    async def _generate_acting_instruction(
+        self, text: str, *, model: str, prompt_key: "ActingInstructionPromptKey"
+    ) -> str:
         response = await self.client.chat.completions.create(
             model=model,
             messages=[

@@ -81,3 +81,16 @@ TranslationSummaryStatus: TypeAlias = Literal[
     "error",
     "dry-run",
 ]
+
+TranslationPromptKey: TypeAlias = Literal["literary_v1"]
+ActingInstructionPromptKey: TypeAlias = Literal[
+    "en_director_v1",
+    "es_director_v1",
+    "fr_director_v1",
+    "de_director_v1",
+    "pt_director_v1",
+    "it_director_v1",
+    "zh_director_v1",
+    "uk_director_v1",
+    "ru_director_v1",
+]
