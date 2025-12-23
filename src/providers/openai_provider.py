@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 
 from openai import OpenAI
 
+from prompts.translation import get_translation_prompt
+
 
 @dataclass
 class OpenAITranslationProvider:
@@ -40,12 +42,7 @@ class OpenAITranslationProvider:
         Returns:
             The translated text.
         """
-        prompt = f"""
-Translate the following text into {target_language} in a literary, artistic manner.
-Do not add anything, do not modify structure, only translate the meaning:
-
-{text}
-""".strip()
+        prompt = get_translation_prompt(None, target_language=target_language, text=text)
         response = self.client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": prompt}],

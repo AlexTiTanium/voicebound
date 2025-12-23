@@ -4,3 +4,7 @@ from prompts.acting_instructions import (  # noqa: F401
     DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY,
     get_acting_instruction_prompt,
 )
+from prompts.translation import (  # noqa: F401
+    DEFAULT_TRANSLATION_PROMPT_KEY,
+    get_translation_prompt,
+)

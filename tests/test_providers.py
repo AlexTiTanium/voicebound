@@ -9,6 +9,10 @@ from prompts.acting_instructions import (
     DEFAULT_ACTING_INSTRUCTION_PROMPT_KEY,
     get_acting_instruction_prompt,
 )
+from prompts.translation import (
+    DEFAULT_TRANSLATION_PROMPT_KEY,
+    get_translation_prompt,
+)
 from providers import (
     elevenlabs_provider,
     hume_provider,
@@ -425,6 +429,19 @@ def test_acting_instruction_prompt_registry():
 
     with pytest.raises(ValueError):
         get_acting_instruction_prompt("missing-key")
+
+
+def test_translation_prompt_registry():
+    prompt = get_translation_prompt(
+        DEFAULT_TRANSLATION_PROMPT_KEY,
+        target_language="Spanish",
+        text="Hello",
+    )
+    assert "Spanish" in prompt
+    assert "Hello" in prompt
+
+    with pytest.raises(ValueError):
+        get_translation_prompt("missing-key", target_language="Spanish", text="Hello")
 
 
 def test_registry_resolves_aliases_and_missing():
