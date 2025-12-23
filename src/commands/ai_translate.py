@@ -1,6 +1,6 @@
 from pathlib import Path
 from threading import Lock
-from typing import Iterable, TypedDict
+from typing import Iterable, TypedDict, cast
 
 import anyio
 import typer
@@ -14,6 +14,7 @@ from apis.translation_api import (
     TranslationSettings,
 )
 from core.summary_reporter import SummaryReporter
+from core.types import ProviderName
 from providers.registry import get_translation_provider_info
 from utils import (
     PROJECT_ROOT,
@@ -103,7 +104,10 @@ def translate_strings(
     configure_logging(level=log_level, color=color)
     config = load_config(config_path)
     translate_cfg = config.get("translate", {})
-    provider = get_config_value(config, "translate", "provider", required=False, default="openai")
+    provider = cast(
+        ProviderName,
+        get_config_value(config, "translate", "provider", required=False, default="openai"),
+    )
     provider_info = get_translation_provider_info(str(provider))
     if provider_info is None:
         logger.warning(

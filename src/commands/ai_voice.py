@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, cast
 
 import anyio
 import tiktoken
@@ -8,6 +8,7 @@ from loguru import logger
 
 from apis.voice_api import VoiceResult, VoiceService, VoiceSettings
 from core.summary_reporter import SummaryReporter
+from core.types import AudioFormat, ProviderName
 from providers.registry import get_voice_provider_info
 from providers.types import VoiceProvider
 from utils import (
@@ -97,8 +98,8 @@ def generate_voice(
     allowed_regex: str | None = None,
     ignore_regex: str | None = None,
     stop_after: int | None = None,
-    audio_format: str | None = None,
-    provider: str | None = None,
+    audio_format: AudioFormat | None = None,
+    provider: ProviderName | None = None,
     config_path: Path | None = None,
     log_level: str | None = None,
     color: bool = True,
@@ -181,8 +182,11 @@ def generate_voice(
 
     input_file = resolve_path(input_file or voice_cfg.get("input_file", ".cache/progress.json"))
     output_dir = resolve_path(output_dir or voice_cfg.get("output_dir", "out/hume"))
-    audio_format = (
-        audio_format or provider_cfg.get("audio_format") or voice_cfg.get("audio_format", "mp3")
+    audio_format = cast(
+        AudioFormat,
+        audio_format
+        or provider_cfg.get("audio_format")
+        or voice_cfg.get("audio_format", "mp3"),
     )
     allowed_regex = allowed_regex or voice_cfg.get("allowed_regex", r"^chp")
     ignore_regex = ignore_regex or voice_cfg.get("ignore_regex", r"")
@@ -439,7 +443,7 @@ def _print_openai_tts_dry_run(
 async def _run_voice_async(
     worklist: list[tuple[str, str]],
     output_dir: Path,
-    audio_format: str,
+    audio_format: AudioFormat,
     model: str,
     voice_name: str,
     split_utterances: bool,
@@ -520,15 +524,17 @@ def typer_command(
     cfg_path = Path(cfg_raw) if cfg_raw else None
     log_level = obj.get("log_level")
     color = obj.get("color", True)
+    provider_value = cast(ProviderName | None, provider)
+    audio_format_value = cast(AudioFormat | None, audio_format)
     generate_voice(
         input_file=input_file,
         output_dir=output_dir,
-        provider=provider,
+        provider=provider_value,
         target_language=target_language,
         allowed_regex=allowed_regex,
         ignore_regex=ignore_regex,
         stop_after=stop_after,
-        audio_format=audio_format,
+        audio_format=audio_format_value,
         config_path=cfg_path,
         log_level=log_level,
         color=color,

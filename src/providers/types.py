@@ -6,6 +6,7 @@ if TYPE_CHECKING:
     import httpx
 
     from apis.voice_api import VoicePayload, VoiceSettings
+    from core.types import TranslationProviderKey, VoiceProviderKey
     from utils.command_utils import ProviderSettings
 
 
@@ -18,8 +19,8 @@ class TranslationProvider(Protocol):
         'Hola'
     """
 
-    key: str
-    name: str
+    key: TranslationProviderKey
+    name: TranslationProviderKey
     default_model: str
     default_rpm: int
 
@@ -46,8 +47,8 @@ class VoiceProvider(Protocol):
         >>> headers = provider.build_headers(settings)
     """
 
-    key: str
-    name: str
+    key: VoiceProviderKey
+    name: VoiceProviderKey
     default_model: str
     default_rpm: int
 

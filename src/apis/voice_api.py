@@ -15,6 +15,7 @@ from utils.command_utils import ProviderSettings, build_runner, build_task_specs
 
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
+    from core.types import AudioFormat, HumeVoiceProviderEnum
     from providers.types import VoiceProvider
 
 
@@ -29,7 +30,7 @@ class VoiceFormat(TypedDict):
         >>> fmt: VoiceFormat = {"type": "mp3"}
     """
 
-    type: str
+    type: AudioFormat
 
 
 class VoiceMeta(TypedDict):
@@ -44,7 +45,7 @@ class VoiceMeta(TypedDict):
     """
 
     name: str
-    provider: str
+    provider: HumeVoiceProviderEnum
 
 
 class VoiceUtterance(TypedDict):
@@ -104,7 +105,7 @@ class VoicePayload(TypedDict, total=False):
     model_id: str
     voice_id: str
     voice: str
-    response_format: str
+    response_format: AudioFormat
     instructions: str
 
 
@@ -143,7 +144,7 @@ class VoiceSettings:
 
     model: str
     voice_name: str
-    audio_format: str
+    audio_format: AudioFormat
     split_utterances: bool
     octave_version: str
     max_elapsed_seconds: float | None

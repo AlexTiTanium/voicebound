@@ -34,6 +34,7 @@ from utils import get_config_value, load_json, write_json
 T = TypeVar("T")
 if TYPE_CHECKING:
     ElementTreeT: TypeAlias = ET.ElementTree[ET.Element | None]
+    from core.types import AudioFormat, ProviderKey
 else:
     ElementTreeT = ET.ElementTree
 
@@ -107,7 +108,7 @@ def load_retry_defaults(config: Mapping[str, Any]) -> RetryConfig:
 def load_provider_settings(
     config: Mapping[str, Any],
     *,
-    provider_key: str,
+    provider_key: ProviderKey,
     default_model: str,
     default_rpm: int,
 ) -> ProviderSettings:
@@ -311,7 +312,7 @@ def build_voice_worklist(
     existing_outputs: set[str],
     stop_after: int,
     output_dir: Path,
-    audio_format: str,
+    audio_format: AudioFormat,
 ) -> list[tuple[str, str]]:
     """
     Filter translation progress to create a worklist for voice generation.

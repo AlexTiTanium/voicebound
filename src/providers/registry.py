@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, cast
 
+from core.types import ProviderAlias, ProviderKey, TranslationProviderKey, VoiceProviderKey
 from providers.elevenlabs_provider import ElevenLabsVoiceProvider
 from providers.hume_provider import HumeVoiceProvider
 from providers.openai_provider import OpenAITranslationProvider
@@ -21,8 +22,8 @@ class TranslationProviderInfo:
         >>> info = get_translation_provider_info("openai")
     """
 
-    key: str
-    name: str
+    key: TranslationProviderKey
+    name: TranslationProviderKey
     default_model: str
     default_rpm: int
     factory: Callable[[str], TranslationProvider]
@@ -37,15 +38,15 @@ class VoiceProviderInfo:
         >>> info = get_voice_provider_info("hume_ai")
     """
 
-    key: str
-    name: str
+    key: VoiceProviderKey
+    name: VoiceProviderKey
     default_model: str
     default_voice_name: str
     default_rpm: int
     factory: Callable[[str], VoiceProvider]
 
 
-_TRANSLATION_PROVIDERS: dict[str, TranslationProviderInfo] = {
+_TRANSLATION_PROVIDERS: dict[TranslationProviderKey, TranslationProviderInfo] = {
     "openai": TranslationProviderInfo(
         key="openai",
         name="openai",
@@ -55,7 +56,7 @@ _TRANSLATION_PROVIDERS: dict[str, TranslationProviderInfo] = {
     ),
 }
 
-_VOICE_PROVIDERS: dict[str, VoiceProviderInfo] = {
+_VOICE_PROVIDERS: dict[VoiceProviderKey, VoiceProviderInfo] = {
     "elevenlabs": VoiceProviderInfo(
         key="elevenlabs",
         name="elevenlabs",
@@ -82,7 +83,7 @@ _VOICE_PROVIDERS: dict[str, VoiceProviderInfo] = {
     ),
 }
 
-_ALIASES: dict[str, str] = {
+_ALIASES: dict[ProviderAlias, ProviderKey] = {
     "open_ai": "openai",
     "openia": "openai",
     "openai-tts": "openai_tts",
@@ -123,8 +124,13 @@ def get_translation_provider_info(name: str | None) -> TranslationProviderInfo |
         TranslationProviderInfo if found, else None.
     """
     normalized = _normalize(name)
-    lookup = _ALIASES.get(normalized, normalized)
-    return _TRANSLATION_PROVIDERS.get(lookup)
+    if normalized in _ALIASES:
+        lookup = _ALIASES[cast(ProviderAlias, normalized)]
+    else:
+        lookup = normalized
+    if lookup in _TRANSLATION_PROVIDERS:
+        return _TRANSLATION_PROVIDERS[cast(TranslationProviderKey, lookup)]
+    return None
 
 
 def get_voice_provider_info(name: str | None) -> VoiceProviderInfo | None:
@@ -138,5 +144,10 @@ def get_voice_provider_info(name: str | None) -> VoiceProviderInfo | None:
         VoiceProviderInfo if found, else None.
     """
     normalized = _normalize(name)
-    lookup = _ALIASES.get(normalized, normalized)
-    return _VOICE_PROVIDERS.get(lookup)
+    if normalized in _ALIASES:
+        lookup = _ALIASES[cast(ProviderAlias, normalized)]
+    else:
+        lookup = normalized
+    if lookup in _VOICE_PROVIDERS:
+        return _VOICE_PROVIDERS[cast(VoiceProviderKey, lookup)]
+    return None

@@ -12,6 +12,7 @@ from utils.command_utils import ProgressReporter, ProviderSettings, load_provide
 
 if TYPE_CHECKING:
     from core.summary_reporter import SummaryReporter
+    from core.types import ProviderKey
 
 T = TypeVar("T")
 
@@ -47,7 +48,7 @@ class CommandContext:
 def make_command_context(
     *,
     config_path: Path | None,
-    provider_key: str,
+    provider_key: ProviderKey,
     default_model: str,
     default_rpm: int,
     log_level: str | None = None,

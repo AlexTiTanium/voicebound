@@ -7,6 +7,7 @@ if TYPE_CHECKING:
     import httpx
 
     from apis.voice_api import VoicePayload, VoiceSettings
+    from core.types import VoiceProviderKey
     from utils.command_utils import ProviderSettings
 
 API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
@@ -23,8 +24,8 @@ class ElevenLabsVoiceProvider:
         >>> provider = ElevenLabsVoiceProvider()
     """
 
-    key: str = "elevenlabs"
-    name: str = "elevenlabs"
+    key: VoiceProviderKey = "elevenlabs"
+    name: VoiceProviderKey = "elevenlabs"
     default_model: str = "eleven_multilingual_v2"
     default_rpm: int = 60
     api_url: str = API_URL

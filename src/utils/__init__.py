@@ -11,6 +11,8 @@ from typing import Any, Mapping, TypeVar
 import toml
 from loguru import logger
 
+from core.types import ConfigKey, ConfigSection, ProviderKey
+
 # Project paths
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LOCAL_CONFIG = PROJECT_ROOT / "config.toml"
@@ -18,11 +20,11 @@ DEFAULT_XDG_CONFIG = (
     Path(os.getenv("XDG_CONFIG_HOME", Path.home() / ".config")) / "voicebound" / "config.toml"
 )
 
-REQUIRED_CONFIG = {
+REQUIRED_CONFIG: dict[ProviderKey, list[ConfigKey]] = {
     "openai": ["api_key"],
 }
 
-VOICE_REQUIRED_KEYS = {
+VOICE_REQUIRED_KEYS: dict[ProviderKey, list[ConfigKey]] = {
     "hume_ai": ["api_key"],
     "elevenlabs": ["api_key"],
     "openai_tts": ["api_key"],
@@ -142,8 +144,8 @@ def validate_config(config: dict[str, Any], path: Path) -> None:
 
 def get_config_value(
     config: Mapping[str, Any],
-    section: str,
-    key: str,
+    section: ConfigSection | str,
+    key: ConfigKey | str,
     *,
     required: bool = True,
     default: Any = None,

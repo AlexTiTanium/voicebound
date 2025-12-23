@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable
+from typing import TYPE_CHECKING, Iterable
 
 from loguru import logger
+
+if TYPE_CHECKING:
+    from core.types import TranslationSummaryStatus
 
 
 @dataclass
@@ -28,7 +31,7 @@ class SummaryReporter:
     ignored: int = 0
     empty: int = 0
 
-    def record_translation(self, status: str, task_id: str | None) -> None:
+    def record_translation(self, status: TranslationSummaryStatus, task_id: str | None) -> None:
         """
         Record the outcome of a translation task.
 
@@ -48,6 +51,8 @@ class SummaryReporter:
             self.empty += 1
         elif status == "error" and task_id:
             self.failures.append(task_id)
+        elif status == "dry-run":
+            return
 
     def record_success(self, task_id: str | None) -> None:
         """

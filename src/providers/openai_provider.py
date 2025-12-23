@@ -1,10 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from openai import OpenAI
 
 from prompts.translation import get_translation_prompt
+
+if TYPE_CHECKING:
+    from core.types import TranslationProviderKey
 
 
 @dataclass
@@ -21,8 +25,8 @@ class OpenAITranslationProvider:
     api_key: str
     client: OpenAI = field(init=False)
 
-    key: str = "openai"
-    name: str = "openai"
+    key: TranslationProviderKey = "openai"
+    name: TranslationProviderKey = "openai"
     default_model: str = "gpt-5-nano"
     default_rpm: int = 60
 

@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     import httpx
 
     from apis.voice_api import VoicePayload, VoiceSettings
+    from core.types import AudioFormat, VoiceProviderKey
     from utils.command_utils import ProviderSettings
 else:
     import httpx
@@ -23,7 +24,7 @@ class OpenAITTSPayload(TypedDict, total=False):
     model: str
     input: str
     voice: str
-    response_format: str
+    response_format: AudioFormat
     instructions: str
 
 
@@ -41,8 +42,8 @@ class OpenAITTSVoiceProvider:
     api_key: str
     client: AsyncOpenAI = field(init=False)
 
-    key: str = "openai_tts"
-    name: str = "openai_tts"
+    key: VoiceProviderKey = "openai_tts"
+    name: VoiceProviderKey = "openai_tts"
     default_model: str = "gpt-4o-mini-tts-2025-12-15"
     default_rpm: int = 60
     api_url: str = API_URL

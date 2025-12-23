@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import re
 import runpy
 from pathlib import Path
 from threading import Lock
-from typing import cast
+from typing import TYPE_CHECKING, cast
 from xml.etree import ElementTree as ET
 
 import anyio
@@ -21,6 +23,9 @@ from core.summary_reporter import SummaryReporter
 from core.task_runner import RetryConfig
 from providers import openai_provider
 from utils.command_utils import ProviderSettings
+
+if TYPE_CHECKING:
+    from core.types import TranslationProviderKey
 
 
 class DummyEncoding:
@@ -54,8 +59,8 @@ class DummyOpenAI:
 class DummyProvider:
     def __init__(self, content: str):
         self._content = content
-        self.key = "dummy"
-        self.name = "dummy"
+        self.key: TranslationProviderKey = "openai"
+        self.name: TranslationProviderKey = "openai"
         self.default_model = "dummy"
         self.default_rpm = 1
 
