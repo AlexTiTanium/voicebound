@@ -67,6 +67,6 @@ allowed_regex = "^chp"
 ignore_regex = ""
 stop_after = 0
 target_language = "Russian"
-provider = "hume_ai"
+provider = "openai_tts"
 max_elapsed_seconds = 600
 dry_run = false
